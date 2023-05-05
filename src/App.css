@@ -1,0 +1,73 @@
+.my-menu {
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: all 0.3s ease-in-out;
+}
+
+
+.my-menu:hover {
+    background: #eee;
+    font-weight: bold;
+    border-radius: 5px;
+    margin: 2px 0px;
+}
+
+.my-menu.current {
+    background-color: #06695C;
+    color: #fff;
+    font-weight: bold;
+    border-radius: 5px;
+}
+
+.my-dx {
+    cursor: pointer;
+    padding: 5px;
+    transition: all 0.3s ease-in-out;
+}
+
+.my-dx:hover {
+    background-color: #06695C40;
+    border-radius: 5px;
+}
+
+.option-item {
+    padding: 2px;
+    background-color: #06695C;
+    border-radius: 5px;
+}
+
+.image-item:hover {
+    background-color: #06695C40;
+    border: 1px solid #06695C;
+    border-radius: 4px;
+    padding: 1px;
+    transition: all 0.4s ease-in-out;
+}
+
+.image-item.active {
+    background-color: #06695C40;
+    border: 1px solid #06695C;
+    border-radius: 4px;
+    padding: 1px;
+}
+
+.background-green-40 {
+    background-color: #06695C20 !important;
+}
+
+.my-table-width {
+    width: 1200px;
+}
+
+.my-shadow {
+    box-shadow: rgb(64 75 90 / 20%) 0px 0px 1px 0px,
+        rgb(64 75 90 / 28%) 0px 2px 1px 0px;
+}
+
+.ant-segmented-item {
+    margin-bottom: 0px !important;
+}
+
+body {
+    overflow: hidden !important;
+}
