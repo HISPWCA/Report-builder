@@ -24,19 +24,22 @@ import {
   Checkbox,
 } from '@dhis2/ui'
 
+import { QuestionCircleOutlined } from '@ant-design/icons';
+
 import { v4 as uuid } from 'uuid'
 import Scrollbars from 'react-custom-scrollbars-2'
 import TrackerDimensionsDialog from './TrackerDimensionsDialog'
 import { BiEdit } from 'react-icons/bi'
 import { RiDeleteBinLine } from 'react-icons/ri'
-import moment from 'moment'
+import dayjs from 'dayjs'
 import { CgCloseO } from 'react-icons/cg'
-import { AGGREGATE, ATTRIBUTE, CATEGORY_COMBO, CURRENT_ORG_UNIT_OBJECT, DATA_ELEMENT, DATA_SET, DATA_SET_EVENT, DATE, ENROLLMENT, ENROLLMENT_DATE, INCIDENT_DATE, INDICATOR, ORGANISATION_UNIT_NAME, OTHER_ELEMENT, PROGRAM_INDICATOR, SELECTED_DATE, TRACKER } from '../utils/constants'
-import { Segmented, Spin } from 'antd'
+import { AGGREGATE, ATTRIBUTE, CATEGORY_COMBO, CURRENT_ORG_UNIT_OBJECT, DATA_ELEMENT, DATA_SET, DATA_SET_EVENT, DATE, ENROLLMENT, ENROLLMENT_DATE, INCIDENT_DATE, INDICATOR, NOTIFICATON_CRITICAL, NOTIFICATON_SUCCESS, ORGANISATION_UNIT_NAME, OTHER_ELEMENT, PROGRAM_INDICATOR, SELECTED_DATE, TRACKER } from '../utils/constants'
+import { Popconfirm, Segmented, Spin } from 'antd'
 import { DataDimension } from '@dhis2/analytics'
 import { IoSettingsOutline } from 'react-icons/io5'
 import { AiOutlineSearch } from 'react-icons/ai'
 import { AiFillCloseCircle } from 'react-icons/ai'
+import { loadDataStore, saveDataToDataStore } from '../utils/fonctions'
 
 const summernoteConfig = {
   height: 500,
@@ -75,14 +78,15 @@ const summernoteConfig = {
 }
 
 const DesignsPage = ({
-  dataStoreReports,
-  handleSaveDataToDataStore,
-  loadingSendDatas,
-  setLoadingSendDatas,
   organisationUnitLevels,
-  setNotification,
   organisationUnitGroups,
-  loadingDataStoreReports,
+  legends,
+  reports,
+  setReports,
+  loadingReports,
+  setLoadingReports,
+  loadingLegends,
+  setNotif
 }) => {
 
   const [reportName, setReportName] = useState(null)
@@ -95,7 +99,6 @@ const DesignsPage = ({
   const [activeElementID, setActiveElementID] = useState(null)
   const [currentRepport, setCurrentReport] = useState(null)
   const [currentDimensionSelected, setCurrentDimensionSelected] = useState(null)
-  const [loadingInitState, setLoadingInitState] = useState(false)
   const [isSearchMode, setSearchMode] = useState(false)
   const [searchInAllInput, setSearchInAllInput] = useState("")
 
@@ -116,6 +119,7 @@ const DesignsPage = ({
   const [selectedEnrollmentDataToDisplay, setSelectedEnrollmentDataToDisplay] = useState(null)
   const [selectedAttributeValueTypeToDisplay, setSelectedAttributeValueTypeToDisplay] = useState(null)
   const [_, setSelectedAttributeIsSearchable] = useState(false)
+  const [selectedOtherOrganisationUnitElements, setSelectedOtherOrganisationUnitElements] = useState([])
 
   const [visibleSaveModal, setVisibleSaveModal] = useState(false)
   const [visibleSelectDXTitle, setVisibleSelectDXTitle] = useState(false)
@@ -125,7 +129,9 @@ const DesignsPage = ({
   const [visibleSelectDXAggregateModal, setVisibleSelectDXAggregateModal] = useState(false)
 
   const [visibleOtherOrganisationUnitElementModal, setVisibleOtherOrganisationUnitElementModal] = useState(false)
-  const [selectedOtherOrganisationUnitElements, setSelectedOtherOrganisationUnitElements] = useState([])
+
+  const [loadingInitState, setLoadingInitState] = useState(false)
+  const [loadingProcess, setLoadingProcess] = useState(false)
 
   const initSummernote = (existing_html) => {
     window.$(document).ready(function () {
@@ -150,7 +156,6 @@ const DesignsPage = ({
           }
         }
       })
-
     })
   }
 
@@ -175,7 +180,7 @@ const DesignsPage = ({
 
     } catch (err) {
       console.log(err)
-      setNotification({ visible: true, type: "critical", message: err.message })
+      setNotif({ show: true, type: NOTIFICATON_CRITICAL, message: err.message })
       setLoadingInitState(false)
 
     }
@@ -183,7 +188,7 @@ const DesignsPage = ({
 
   const handleSaveReport = async () => {
     try {
-      setLoadingSendDatas(true)
+      setLoadingProcess(true)
       const html_code = window.$('#summernote').summernote('code')
 
       if (!reportName || reportName.trim() === "")
@@ -195,59 +200,55 @@ const DesignsPage = ({
       let payload = {}
 
       if (editReport && currentRepport) {
-        payload = {
-          ...dataStoreReports,
-          reports: dataStoreReports.reports.map(rep => {
-            if (rep.id === currentRepport.id) {
-              return {
-                ...rep,
-                dimensions: {
-                  ...rep.dimensions,
-                  dx: selectedConfigDimensions
-                },
-                html: html_code,
-                name: reportName,
-                selectedProgram: selectedProgram,
-                updatedAt: moment(),
-                searchProperties
-              }
-            } else {
-              return rep
-            }
-          })
-        }
-      } else {
-        payload = {
-          ...dataStoreReports,
-          reports: [
-            ...dataStoreReports.reports,
-            {
-              ...currentRepport,
+        payload = reports.map(rep => {
+          if (rep.id === currentRepport.id) {
+            return {
+              ...rep,
+              dimensions: {
+                ...rep.dimensions,
+                dx: selectedConfigDimensions
+              },
               html: html_code,
               name: reportName,
-              createdAt: moment(),
-              updatedAt: moment(),
-              id: uuid(),
-              searchProperties,
-              selectedProgram: selectedProgram
+              selectedProgram: selectedProgram,
+              updatedAt: dayjs(),
+              searchProperties
             }
-          ]
-        }
+          } else {
+            return rep
+          }
+        })
+
+      } else {
+        payload = [
+          {
+            ...currentRepport,
+            html: html_code,
+            name: reportName,
+            createdAt: dayjs(),
+            updatedAt: dayjs(),
+            id: uuid(),
+            searchProperties,
+            selectedProgram: selectedProgram
+          },
+          ...reports
+        ]
       }
 
-      await handleSaveDataToDataStore(payload)
+      await saveDataToDataStore(process.env.REACT_APP_REPORTS_KEY, payload, setLoadingProcess, null, null)
+      loadDataStore(process.env.REACT_APP_REPORTS_KEY, setLoadingReports, setReports, [])
 
       cleanStateAfterReportSaved()
       setEditReport(false)
       setVisibleAddReport(false)
       setVisibleSaveModal(false)
-      setNotification({ message: "Report saved", type: "success", visible: true })
-      setLoadingSendDatas(false)
+      setLoadingProcess(false)
+      setNotif({ show: true, message: 'Report saved !', type: NOTIFICATON_SUCCESS })
 
     } catch (err) {
       console.log(err)
-      setNotification({ message: err.message, type: "critical", visible: true })
-      setLoadingSendDatas(false)
+      setLoadingProcess(false)
+      setNotif({ show: true, message: err.response?.data?.message || err.message, type: NOTIFICATON_CRITICAL })
     }
   }
 
@@ -283,8 +284,6 @@ const DesignsPage = ({
 
 
   const handleClickOnAggregateDimensionElement = dx => {
-    console.log("Selected dimension dx:", dx)
-    console.log("All dimension list: ")
     if (currentHtmlTagSelected && currentHtmlTagSelected !== "") {
       setCurrentDimensionSelected(dx)
       setVisibleSelectDXAggregateModal(true)
@@ -332,7 +331,7 @@ const DesignsPage = ({
               .concat('|')
               .concat(selectedAttributeToDisplay.name)
               .concat('|')
-              .concat(legendToUse && dataStoreReports.legends.find(l => l.id === legendToUse)?.name || '')
+              .concat(legendToUse && legends.find(l => l.id === legendToUse)?.name || '')
               .concat('|')
               .concat(selectedTypeLegendToDisplay)
 
@@ -391,7 +390,7 @@ const DesignsPage = ({
               .concat('|')
               .concat(selectedDataElementDimensionToDisplay.name)
               .concat('|')
-              .concat(legendToUse && dataStoreReports.legends.find(l => l.id === legendToUse)?.name || '')
+              .concat(legendToUse && legends.find(l => l.id === legendToUse)?.name || '')
               .concat('|')
               .concat(selectedTypeLegendToDisplay)
 
@@ -478,8 +477,6 @@ const DesignsPage = ({
               .concat(selectedOuLevelToDisplay === "CURRENT" ? "CURRENT" : organisationUnitLevels.find(lvl => lvl.id === selectedOuLevelToDisplay)?.name || selectedOuLevelToDisplay)
               .concat(selectedOuGroupToDisplay ? '|'.concat(organisationUnitGroups.find(o => o.id === selectedOuGroupToDisplay)?.name) : '')
 
-          console.log("Value id string : ", id_string)
-
           has_legend = 'NO'
         } else {
           id_string =
@@ -500,7 +497,7 @@ const DesignsPage = ({
               .concat('|')
               .concat(selectedOuLevelToDisplay === "CURRENT" ? "CURRENT" : organisationUnitLevels.find(lvl => lvl.id === selectedOuLevelToDisplay)?.name || selectedOuLevelToDisplay)
               .concat('|')
-              .concat(legendToUse && dataStoreReports.legends.find(l => l.id === legendToUse)?.name || '')
+              .concat(legendToUse && legends.find(l => l.id === legendToUse)?.name || '')
               .concat('|')
               .concat(selectedTypeLegendToDisplay)
               .concat(selectedOuGroupToDisplay ? '|'.concat(organisationUnitGroups.find(o => o.id === selectedOuGroupToDisplay)?.name || selectedOuGroupToDisplay) : '')
@@ -509,7 +506,6 @@ const DesignsPage = ({
           has_legend = 'YES'
         }
 
-        console.log("Current html tag selected ", currentHtmlTagSelected)
         window.$(currentHtmlTagSelected).attr("id", id_string)
         window.$(currentHtmlTagSelected).attr("data-type", 'AGGREGATE')
         window.$(currentHtmlTagSelected).attr("data-has-legend", has_legend)
@@ -540,7 +536,7 @@ const DesignsPage = ({
 
   const SaveModal = () => visibleSaveModal ? <Modal small onClose={handleCloseSaveModal}>
     <ModalTitle>
-      Save
+      Save Report
     </ModalTitle>
     <ModalContent>
       {!reportName && <NoticeBox title="Infos" warning>
@@ -556,7 +552,7 @@ const DesignsPage = ({
         <Button onClick={handleCloseSaveModal} secondary>
           close
         </Button>
-        <Button onClick={() => handleSaveReport()} primary disabled={loadingSendDatas || loadingDataStoreReports} loading={loadingSendDatas || loadingDataStoreReports}>
+        <Button onClick={() => handleSaveReport()} primary disabled={loadingProcess} loading={loadingProcess}>
           Save Report
         </Button>
       </ButtonStrip>
@@ -641,15 +637,26 @@ const DesignsPage = ({
   }
 
   const RenderLegendToApply = selectedProgramToDisplay && <>
-    {selectedRadioTypeLegend === "LEGEND" && <div className='mt-2'>
-      <Field label="Choose legend to apply ">
-        <SingleSelect placeholder="Choose legend to apply" selected={legendToUse} onChange={({ selected }) => handleChooseLegendToDisplay(selected)} >
-          {dataStoreReports.legends.length > 0 && dataStoreReports.legends.map(leg => (
-            <SingleSelectOption key={leg.id} label={leg.name} value={leg.id} />
-          ))}
-        </SingleSelect>
-      </Field>
-    </div>}
+    {
+      selectedRadioTypeLegend === "LEGEND" && (
+        <>
+          <div className='mt-2'>
+            {
+              loadingLegends && (
+                <div className='d-flex'> <CircularLoader small /> <span className='ml-2'>Loading...</span></div>
+              )
+            }
+            <Field label="Choose legend to apply ">
+              <SingleSelect placeholder="Choose legend to apply" selected={legendToUse} onChange={({ selected }) => handleChooseLegendToDisplay(selected)} >
+                {legends.length > 0 && legends.map(leg => (
+                  <SingleSelectOption key={leg.id} label={leg.name} value={leg.id} />
+                ))}
+              </SingleSelect>
+            </Field>
+          </div>
+        </>
+      )
+    }
 
     {selectedRadioTypeLegend === "LEGEND" && legendToUse && (
       <div className='mt-2'>
@@ -758,9 +765,6 @@ const DesignsPage = ({
 
   const handleInjectOtherOrganisationUnitElementToHTML = () => {
     if (selectedOtherOrganisationUnitElements.length > 0 && currentHtmlTagSelected) {
-      console.log("Selected Organisation unit  : ", selectedOtherOrganisationUnitElements)
-      console.log("current html tag selected ", currentDimensionSelected)
-
 
       const id_string = selectedOtherOrganisationUnitElements.join('|')
 
@@ -867,7 +871,7 @@ const DesignsPage = ({
         <Button
           primary
           disabled={handleDisableOKBtnForTrackerInsersionFields()}
-          loading={loadingSendDatas ? true : false}
+          loading={loadingProcess ? true : false}
           onClick={() => handleInjectTrackerIds()}
         >
           OK
@@ -897,7 +901,7 @@ const DesignsPage = ({
           selectedOuLevelToDisplay &&
           organisationUnitGroups.length > 0 &&
           (
-            <div className='mt-23'>
+            <div className='mt-2'>
               <Field label="Select organisation unit group ( optional ) ">
                 <SingleSelect placeholder="Organisation Unit group" selected={selectedOuGroupToDisplay} onChange={handleChangeSelectedOuGroupToDisplay} >
                   {
@@ -910,8 +914,6 @@ const DesignsPage = ({
             </div>
           )
         }
-
-        {console.log(selectedOuGroupToDisplay)}
 
         <div className='mt-2'>
           <Field label="Display Way">
@@ -937,9 +939,14 @@ const DesignsPage = ({
         {selectedRadioTypeLegend === "LEGEND" && (
           <>
             <div className='mt-2'>
+              {
+                loadingLegends && (
+                  <div className='d-flex'> <CircularLoader small /> <span className='ml-2'>Loading...</span></div>
+                )
+              }
               <Field label="Choose legend to apply ">
                 <SingleSelect placeholder="Choose legend to apply" selected={legendToUse} onChange={({ selected }) => setLegendToUse(selected)} >
-                  {dataStoreReports.legends.length > 0 && dataStoreReports.legends.map(leg => (
+                  {legends.length > 0 && legends.map(leg => (
                     <SingleSelectOption key={leg.id} label={leg.name} value={leg.id} />
                   ))}
                 </SingleSelect>
@@ -974,7 +981,7 @@ const DesignsPage = ({
               selectedTypeLegendToDisplay ? false : true
             : true
         }
-          loading={loadingSendDatas ? true : false}
+          loading={loadingProcess ? true : false}
           onClick={() => handleInjectAggregateIds()}
         >
           OK
@@ -1005,7 +1012,7 @@ const DesignsPage = ({
           close
         </Button>
         <Button primary
-          loading={loadingSendDatas ? true : false}
+          loading={loadingProcess ? true : false}
           onClick={() => handleInjectTrackerIds()}
         >
           OK
@@ -1022,7 +1029,6 @@ const DesignsPage = ({
   const RenderAggregateContifigurationDimensionContent = () => <DataDimension
     selectedDimensions={selectedConfigDimensionsAggregate}
     onSelect={value => {
-      console.log("Value : ", value)
       setSelectedConfigDimensionsAggregate(value.items)
     }}
     displayNameProp="displayName"
@@ -1361,8 +1367,6 @@ const DesignsPage = ({
         {RenderRenderOtherCollapse()}
       </Scrollbars>
     </div>
-
-
   )
 
 
@@ -1370,11 +1374,11 @@ const DesignsPage = ({
     <div style={{ width: "100%", height: "100%", display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}> <CircularLoader>Loading</CircularLoader> </div>
   ) : (
     <div style={{ width: "100%" }}>
-      <div className='border-bottom pb-2'>
-        {editReport && currentRepport ? <h3> {currentRepport.name} </h3> : <h3> Design Interface</h3>}
+      <div className='my-shadow p-3 bg-white' style={{ position: 'sticky', top: '0px', zIndex: 100 }}>
+        {editReport && currentRepport ? <div style={{ fontSize: '16px', fontWeight: 'bold', }}> {currentRepport.name} </div> : <div style={{ fontWeight: 'bold', fontSize: '16px' }}> Design Interface</div>}
       </div>
 
-      <div className='row py-4' >
+      <div className='row py-4 px-3' >
         <div className='col-md-9'>
           <div className="my-1">
             <Button onClick={() => setVisibleConfigurationModal(true)} primary icon={<IoSettingsOutline style={{ color: '#fff' }} />}>Configuration</Button>
@@ -1426,26 +1430,25 @@ const DesignsPage = ({
   const handleDeleteReport = async (id) => {
     try {
       if (id) {
-        setLoadingSendDatas(false)
+        setLoadingProcess(false)
         setActiveElementID(id)
 
-        const newPayload = {
-          ...dataStoreReports,
-          reports: dataStoreReports.reports.filter(r => r.id !== id)
-        }
+        const newPayload = reports.filter(r => r.id !== id)
 
-        await handleSaveDataToDataStore(newPayload)
-        setNotification({ visible: true, message: "Delete success", type: 'success' })
-        setLoadingSendDatas(false)
+        await saveDataToDataStore(process.env.REACT_APP_REPORTS_KEY, newPayload, setLoadingProcess, null, null)
+        loadDataStore(process.env.REACT_APP_REPORTS_KEY, setLoadingReports, setReports, [])
+
+        setNotif({ show: true, message: 'Delete success !', type: NOTIFICATON_SUCCESS })
+        setLoadingProcess(false)
         setActiveElementID(null)
       } else {
         throw new Error("No report selected ")
       }
 
     } catch (err) {
-      setNotification({ visible: true, message: err.message, type: 'critical' })
-      setLoadingSendDatas(false)
+      setLoadingProcess(false)
       setActiveElementID(null)
+      setNotif({ show: true, message: err.response?.data?.message || err.message, type: NOTIFICATON_CRITICAL })
     }
   }
 
@@ -1464,60 +1467,90 @@ const DesignsPage = ({
 
 
   const RenderListReport = () => (
-    <div className='bg-white p-4 rounded my-shadow border'>
-      <div className='d-flex justify-content-between align-items-center mb-1'>
-        <h4 style={{ textDecoration: "underline" }}> Report list </h4>
-        <Button primary onClick={handleAddReport}>New Report</Button>
+    <>
+      <div className='p-3 bg-white' style={{ position: 'sticky', top: '0px', zIndex: 100 }}>
+        <div style={{ fontWeight: 'bold', fontSize: '16px' }}> Report List</div>
       </div>
-      <Table className="border">
-        <TableHead>
-          <TableRowHead className="background-green-40">
-            <TableCellHead dense>Name</TableCellHead>
-            <TableCellHead dense>Last updated</TableCellHead>
-            <TableCellHead dense>Actions</TableCellHead>
-          </TableRowHead>
-        </TableHead>
-        <TableBody>
-          {dataStoreReports.reports.length > 0 ? dataStoreReports.reports.map(report => (
-            <TableRow key={report.id}>
-              <TableCell dense>
-                {report.name}
-              </TableCell>
-              <TableCell dense>
-                {
-                  report.updatedAt && (
-                    <div className='text-muted'> {moment(report.updatedAt).format('DD/MM/YYYY')} </div>
-                  )
-                }
 
-              </TableCell>
-              <TableCell dense>
-                <div className='d-flex align-items-center'>
-                  <span className='d-flex align-items-center justify-content-center'>
-                    <BiEdit style={{ color: "#06695C", fontSize: "18px", cursor: "pointer", background: "#eeeeee20", padding: "2px", borderRadius: "5px", border: "1px solid #ccc" }} onClick={() => handleEditReport(report)} />
-                  </span>
-                  <span className='ml-2 d-flex align-items-center justify-content-center'>
-                    {loadingSendDatas && activeElementID === report.id && <Spin size='small' className='mr-2' />}
-                    <RiDeleteBinLine style={{ color: "red", fontSize: "18px", cursor: "pointer", background: "#eeeeee20", padding: "2px", borderRadius: "5px", border: "1px solid #ccc" }} onClick={() => handleDeleteReport(report.id)} />
-                  </span>
-                </div>
-              </TableCell>
-            </TableRow>
-          )) : (
-            <TableRow>
-              <TableCell dense colSpan="6"> No Report </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </div>
+      <div className="p-3">
+        <div className='bg-white p-2 rounded my-shadow'>
+          <div className='text-right'>
+            <Button primary onClick={handleAddReport}>New Report</Button>
+          </div>
+          <div className="mt-1">
+            {
+              loadingReports && (
+                <div className='d-flex'> <CircularLoader small /> <span className='ml-2'>Loading...</span></div>
+              )
+            }
+            <div className='mt-2'>
+              <Table className="border">
+                <TableHead>
+                  <TableRowHead className="background-green-40">
+                    <TableCellHead dense>Name</TableCellHead>
+                    <TableCellHead dense>Last updated</TableCellHead>
+                    <TableCellHead dense>Actions</TableCellHead>
+                  </TableRowHead>
+                </TableHead>
+                <TableBody>
+                  {
+                    reports.length > 0 ? reports.map(report => (
+                      <TableRow key={report.id}>
+                        <TableCell dense>
+                          {report.name}
+                        </TableCell>
+                        <TableCell dense>
+                          {
+                            report.updatedAt && (
+                              <div className='text-muted'> {dayjs(report.updatedAt).format('DD/MM/YYYY')} </div>
+                            )
+                          }
+
+                        </TableCell>
+                        <TableCell dense>
+                          <div className='d-flex align-items-center'>
+                            <span className='d-flex align-items-center justify-content-center'>
+                              <BiEdit style={{ color: "#06695C", fontSize: "18px", cursor: "pointer", background: "#eeeeee20", padding: "2px", borderRadius: "5px", border: "1px solid #ccc" }} onClick={() => handleEditReport(report)} />
+                            </span>
+                            <span className='ml-2 d-flex align-items-center justify-content-center'>
+                              {loadingProcess && activeElementID === report.id && <CircularLoader small className='mr-2' />}
+                              <Popconfirm
+                                title="Delete Report"
+                                description="Are you sure to delete this report ?"
+                                onConfirm={() => handleDeleteReport(report.id)}
+                                icon={
+                                  <QuestionCircleOutlined
+                                    style={{
+                                      color: 'red',
+                                    }}
+                                  />
+                                }
+                              >
+                                <RiDeleteBinLine style={{ color: "red", fontSize: "18px", cursor: "pointer", background: "#eeeeee20", padding: "2px", borderRadius: "5px", border: "1px solid #ccc" }} />
+                              </Popconfirm>
+                            </span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow>
+                        <TableCell dense colSpan="6"> No Report </TableCell>
+                      </TableRow>
+                    )}
+                </TableBody>
+              </Table>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </>
   )
-
 
 
   return (
     <>
-      <div style={{ width: "100%" }}>
+      <div>
         {visibleAddReport && RenderAddReport()}
         {!visibleAddReport && RenderListReport()}
 

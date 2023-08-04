@@ -1,6 +1,7 @@
 import {
     Button,
     ButtonStrip,
+    CircularLoader,
     Field,
     Input,
     Modal,
@@ -16,36 +17,48 @@ import {
     TableCellHead,
     TableHead,
     TableRow,
-    TableRowHead
+    TableRowHead,
 } from '@dhis2/ui'
 import { useState } from 'react'
 import { SketchPicker } from 'react-color'
 import Scrollbars from 'react-custom-scrollbars-2'
 // import { RiImageAddFill } from 'react-icons/ri'
-import { COLOR, IMAGE, LABEL } from '../utils/constants'
+import { COLOR, IMAGE, LABEL, NOTIFICATON_CRITICAL, NOTIFICATON_SUCCESS } from '../utils/constants'
 import { v4 as uuid } from 'uuid'
 import { BiEdit } from 'react-icons/bi'
 import { RiDeleteBinLine } from 'react-icons/ri'
-import moment from 'moment'
-import { getFileAsBase64 } from '../utils/fonctions'
+import { FiSave } from 'react-icons/fi'
+import { DatePicker, Divider, Popconfirm, Popover, Table as TableAntd } from 'antd'
+import { getFileAsBase64, loadDataStore, saveDataToDataStore } from '../utils/fonctions'
+import { AiFillDelete } from 'react-icons/ai'
+import { FaRegClone } from 'react-icons/fa'
+import { TiEdit } from 'react-icons/ti'
+import dayjs from 'dayjs'
+import { QuestionCircleOutlined } from '@ant-design/icons'
 
 
 const LegendPage = ({
-    setNotification,
-    handleSaveDataToDataStore,
-    loadingSendDatas,
-    dataStoreReports,
-    loadingDataStoreReports
+    setNotif,
+    legends,
+    loadingLegends,
+    setLoadingLegends,
+    setLegends
 }) => {
 
+    const [visibleSaveLegendPeriodPopup, setVisibleSaveLegendPeriodPopup] = useState(false)
     const [visibleAddItemImageList, setVisibleAddItemImageList] = useState(false)
     const [visibleNewLegendForm, setVisibleNewLegendForm] = useState(false)
     const [visibleAddLegendItem, setVisibleAddLegendItem] = useState(false)
     const [visibleDefaultLegendImageMissingData, setVisibleDefaultLegendImageMissingData] = useState(false)
     const [visibleDefaultLegendImageNotApplicable, setVisibleDefaultLegendImageNotApplicable] = useState(false)
+    const [visibleFinishCreateLegend, setVisibleFinishCreateLegend] = useState(false)
 
-
-    const [legendDefaultType, setLegendDefaultType] = useState(COLOR)
+    const [startDateForLegendSet, setStartDateForLegendSet] = useState(null)
+    const [endDateForLegendSet, setEndDateForLegendSet] = useState(null)
+    const [legendPeriods, setLegendPeriods] = useState([])
+    const [currentLegendPeriod, setCurrentLegendPeriod] = useState(null)
+    const [isLegendCloned, setIsLegendCloned] = useState(false)
+    const [legendDefaultType, setLegendDefaultType] = useState(IMAGE)
     const [legendName, setLegendName] = useState(null)
     const [legendItemName, setLegendItemName] = useState(null)
     const [legendDefaultMissingData, setLegendDefaultMissingData] = useState(null)
@@ -56,17 +69,17 @@ const LegendPage = ({
     const [legendItemIntervalEnd, setLegendItemIntervalEnd] = useState(null)
     const [errorMessageLegendItem, setErrorMessageLegendItem] = useState(null)
     const [legendItemList, setLegendItemList] = useState([])
-    // const [legendItemSelected, setLegendItemSelected] = useState(null)
     const [editLegendItem, setEditLegendItem] = useState(false)
     const [editLegend, setEditLegend] = useState(false)
     const [currentLegend, setCurrentLegend] = useState(null)
     const [currentLegendItem, setCurrentLegendItem] = useState(null)
-
     const [min, setMin] = useState(null)
     const [max, setMax] = useState(null)
     const [intervalSpace, setIntervalSpace] = useState(3)
-
     const [generateErrorMessage, setGenerateErrorMessage] = useState(null)
+    const [currentLegendIdToDelete, setCurrentLegendIdToDelete] = useState(null)
+
+    const [loadingProcess, setLoadingProcess] = useState(false)
 
     const handleNewLegendBtn = () => {
         setVisibleNewLegendForm(true)
@@ -170,25 +183,36 @@ const LegendPage = ({
     const handleDeleteLegend = async id => {
         try {
             if (id) {
-                const newPayload = {
-                    ...dataStoreReports,
-                    legends: dataStoreReports.legends.filter(r => r.id !== id)
-                }
+                setCurrentLegendIdToDelete(id)
+                setLoadingProcess(true)
+                const newPayload = legends.filter(r => r.id !== id)
 
-                await handleSaveDataToDataStore(newPayload)
-                setNotification({ visible: true, message: "Delete success", type: 'success' })
+                await saveDataToDataStore(process.env.REACT_APP_LEGENDS_KEY, newPayload, null)
+                loadDataStore(process.env.REACT_APP_LEGENDS_KEY, setLoadingLegends, setLegends, [])
+
+                setNotif({ show: true, message: 'Delete success', type: NOTIFICATON_SUCCESS })
+                setLoadingProcess(false)
+                setCurrentLegendIdToDelete(null)
             } else {
                 throw new Error("No report selected ")
             }
 
         } catch (err) {
-            setNotification({ visible: true, message: err.message, type: 'critical' })
+            setNotif({ show: true, message: err.message, type: NOTIFICATON_CRITICAL })
+            setLoadingProcess(false)
         }
     }
 
 
     const handleEditLegend = leg => {
         setEditLegend(true)
+        setLegendPeriods(leg.periods ?
+            Object.entries(leg.periods).map(([key, val]) => (
+                {
+                    ...val,
+                    name: key
+                }
+            )) : [])
         setCurrentLegend(leg)
         initLegendState(leg)
         setVisibleNewLegendForm(true)
@@ -199,7 +223,7 @@ const LegendPage = ({
             setLegendDefaultNotApplicable(currLeg.notApplicable)
             setLegendDefaultMissingData(currLeg.missingData)
             setLegendDefaultType(currLeg.defaultType)
-            setLegendItemList(currLeg.items)
+            setLegendItemList(currLeg.items || [])
             setLegendName(currLeg.name)
             setMin(currLeg.min)
             setMax(currLeg.max)
@@ -216,76 +240,75 @@ const LegendPage = ({
 
     const handleSaveLegend = async () => {
         try {
-            if (!legendDefaultNotApplicable || legendDefaultNotApplicable.trim() === "")
-                throw new Error("Default Not applicable value is required")
 
-            if (!legendDefaultMissingData || legendDefaultMissingData.trim() === "")
-                throw new Error("Default Missing Data value is required")
+            if (!legendName || legendName?.length === 0)
+                return setGenerateErrorMessage('The legend name is required')
 
-            if (!legendName || legendName.trim() === "")
-                throw new Error("Legend name is required")
 
             let payload = {}
 
             if (editLegend && currentLegend) {
-                payload = {
-                    ...dataStoreReports,
-                    legends: dataStoreReports.legends.map(leg => {
-                        if (leg.id === currentLegend.id) {
-                            return {
-                                ...leg,
-                                name: legendName,
-                                min,
-                                max,
-                                intervalSpace,
-                                missingData: legendDefaultMissingData,
-                                notApplicable: legendDefaultNotApplicable,
-                                defaultType: legendDefaultType,
-                                items: legendItemList,
-                                updatedAt: moment()
-                            }
-                        } else {
-                            return leg
-                        }
-                    })
-                }
-            } else {
-                payload = {
-                    ...dataStoreReports,
-                    legends: [
-                        ...dataStoreReports.legends,
-                        {
-                            id: uuid(),
+                payload = legends.map(leg => {
+                    if (leg.id === currentLegend.id) {
+                        return {
+                            ...leg,
                             name: legendName,
-                            min,
-                            max,
-                            intervalSpace,
-                            missingData: legendDefaultMissingData,
-                            notApplicable: legendDefaultMissingData,
-                            defaultType: legendDefaultType,
-                            items: legendItemList,
-                            createdAt: moment(),
-                            updatedAt: moment()
+                            periods: legendPeriods.length > 0 ?
+                                legendPeriods.reduce((prev, current) => {
+                                    prev[`${current.name}`] = { ...current }
+                                    return prev
+                                }, {})
+                                : null,
+                            updatedAt: dayjs()
                         }
-                    ]
-                }
-            }
+                    } else {
+                        return leg
+                    }
+                })
+            } else {
+                if (legends.map(l => l.name).includes(legendName))
+                    throw new Error("Legend already exist !")
 
-            await handleSaveDataToDataStore(payload)
+                payload = [
+                    {
+                        id: uuid(),
+                        name: legendName,
+                        createdAt: dayjs(),
+                        updatedAt: dayjs(),
+                        periods: legendPeriods.length > 0 ?
+                            legendPeriods.reduce((prev, current) => {
+                                prev[`${current.name}`] = { ...current }
+                                return prev
+                            }, {})
+                            : null
+                    },
+                    ...legends
+                ]
+            }
+            await saveDataToDataStore(process.env.REACT_APP_LEGENDS_KEY, payload, setLoadingProcess)
+            loadDataStore(process.env.REACT_APP_LEGENDS_KEY, setLoadingLegends, setLegends, [])
 
             // Clean all state 
             cleanStateAddLegend()
             setVisibleNewLegendForm(false)
-            setNotification({ message: "Legend saved", type: "success", visible: true })
+            setCurrentLegend(null)
+            setCurrentLegendItem(null)
+            setCurrentLegendPeriod(null)
+            setLegendItemList([])
+            setVisibleFinishCreateLegend(false)
+            setNotif({ show: true, message: "Legend saved !", type: NOTIFICATON_SUCCESS })
 
         } catch (err) {
-            console.log(err)
-            setNotification({ message: err.message, type: "critical", visible: true })
+            setVisibleFinishCreateLegend(false)
+            setNotif({ show: true, message: err.message, type: NOTIFICATON_CRITICAL })
         }
     }
 
     const handleCancelSaveLegend = () => {
+        setGenerateErrorMessage(null)
         setVisibleNewLegendForm(false)
+        setCurrentLegendPeriod(null)
+        setLegendPeriods([])
         cleanStateAddLegend()
     }
 
@@ -299,78 +322,324 @@ const LegendPage = ({
     }
 
     const RenderLegendTable = () => (
-        <div className='bg-white p-4 rounded my-shadow border'>
-            <div className='d-flex justify-content-between align-items-center mb-1'>
-                <h4 style={{ textDecoration: "underline" }}> Legend list </h4>
-                <Button primary onClick={handleNewLegendBtn}>+ New Legend</Button>
+        <>
+            <div className='bg-white p-3 border-bottom' style={{ position: 'sticky', top: '0px', zIndex: 100 }}>
+                <div style={{ fontSize: '16px', fontWeight: 'bold' }}>Legend List </div>
             </div>
-            <Table>
-                <TableHead>
-                    <TableRowHead className="background-green-40">
-                        <TableCellHead dense>Name</TableCellHead>
-                        <TableCellHead dense>Missing Value</TableCellHead>
-                        <TableCellHead dense>Not Applicable value</TableCellHead>
-                        <TableCellHead dense>Last updated</TableCellHead>
-                        <TableCellHead dense>Actions</TableCellHead>
-                    </TableRowHead>
-                </TableHead>
-                <TableBody>
-                    {dataStoreReports.legends.length > 0 ? dataStoreReports.legends.map(leg => (
-                        <TableRow key={leg.id}>
-                            <TableCell dense>
-                                {leg.name}
-                            </TableCell>
+            <div className='p-3'>
+                <div className='bg-white p-2 rounded my-shadow'>
+                    <div className='text-right'>
+                        <Button primary onClick={handleNewLegendBtn}>+ New Legend</Button>
+                    </div>
 
-                            <TableCell dense>
-                                {leg.defaultType === COLOR && leg.missingData && (
-                                    <div className='d-flex align-items-center justify-content-center' style={{ backgroundColor: leg.missingData, width: "60px", height: "20px", borderRadius: "6px", fontWeight: "bold", color: '#FFF' }}> {leg.missingData} </div>
-                                )}
-                                {leg.defaultType === LABEL && leg.missingData && (
-                                    <div> {leg.missingData} </div>
-                                )}
-                                {leg.defaultType === IMAGE && leg.missingData && (
-                                    <img src={leg.missingData} style={{ height: "30px", width: "30px" }} />)}
-                            </TableCell>
-                            <TableCell dense>
-                                {leg.defaultType === COLOR && leg.notApplicable && (
-                                    <div className='d-flex align-items-center justify-content-center' style={{ backgroundColor: leg.notApplicable, width: "60px", height: "20px", borderRadius: "6px", fontWeight: "bold", color: '#FFF' }}> {leg.notApplicable} </div>
-                                )}
-                                {leg.defaultType === LABEL && leg.notApplicable && (
-                                    <div> {leg.notApplicable} </div>
-                                )}
-                                {leg.defaultType === IMAGE && leg.notApplicable && (
-                                    <img src={leg.notApplicable} style={{ height: "30px", width: "30px" }} />)}
-                            </TableCell>
-                            <TableCell dense>
-                                {
-                                    leg.updatedAt && (
-                                        <div className='text-muted'> {moment(leg.updatedAt).format('DD/MM/YYYY')} </div>
-                                    )
-                                }
+                    <div className='mt-1'>
+                        {loadingLegends && (
+                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                                <CircularLoader small />
+                                <span style={{ marginLeft: '10px' }}>Loading...</span>
+                            </div>
+                        )}
+                        <div style={{ marginTop: '20px' }}>
+                            <Table>
+                                <TableHead>
+                                    <TableRowHead className="background-green-40">
+                                        <TableCellHead dense>Name</TableCellHead>
+                                        <TableCellHead dense>Last updated</TableCellHead>
+                                        <TableCellHead dense>Actions</TableCellHead>
+                                    </TableRowHead>
+                                </TableHead>
+                                <TableBody>
+                                    {
+                                        legends.length > 0 ? legends.map(leg => (
+                                            <TableRow key={leg.id}>
+                                                <TableCell dense>
+                                                    {leg.name}
+                                                </TableCell>
 
-                            </TableCell>
-                            <TableCell dense>
-                                <div className='d-flex align-items-center'>
-                                    <span>
-                                        <BiEdit style={{ color: "#06695C", fontSize: "16px", cursor: "pointer" }} onClick={() => handleEditLegend(leg)} />
-                                    </span>
-                                    <span className='ml-2'>
-                                        <RiDeleteBinLine style={{ color: "red", fontSize: "16px", cursor: "pointer" }} onClick={() => handleDeleteLegend(leg.id)} />
-                                    </span>
-                                </div>
-                            </TableCell>
-                        </TableRow>
-                    )) : (
-                        <TableRow>
-                            <TableCell dense colSpan="6"> No Legend </TableCell>
-                        </TableRow>
-                    )}
-                </TableBody>
-            </Table>
-        </div>
+                                                {/* <TableCell dense>
+                                        {leg.defaultType === COLOR && leg.missingData && (
+                                            <div className='d-flex align-items-center justify-content-center' style={{ backgroundColor: leg.missingData, width: "60px", height: "20px", borderRadius: "6px", fontWeight: "bold", color: '#FFF' }}> {leg.missingData} </div>
+                                        )}
+                                        {leg.defaultType === LABEL && leg.missingData && (
+                                            <div> {leg.missingData} </div>
+                                        )}
+                                        {leg.defaultType === IMAGE && leg.missingData && (
+                                            <img src={leg.missingData} style={{ height: "30px", width: "30px" }} />)}
+                                    </TableCell>
+                                    <TableCell dense>
+                                        {leg.defaultType === COLOR && leg.notApplicable && (
+                                            <div className='d-flex align-items-center justify-content-center' style={{ backgroundColor: leg.notApplicable, width: "60px", height: "20px", borderRadius: "6px", fontWeight: "bold", color: '#FFF' }}> {leg.notApplicable} </div>
+                                        )}
+                                        {leg.defaultType === LABEL && leg.notApplicable && (
+                                            <div> {leg.notApplicable} </div>
+                                        )}
+                                        {leg.defaultType === IMAGE && leg.notApplicable && (
+                                            <img src={leg.notApplicable} style={{ height: "30px", width: "30px" }} />)}
+                                    </TableCell> */}
+
+                                                <TableCell dense>
+                                                    {
+                                                        leg.updatedAt && (
+                                                            <div className='text-muted'> {dayjs(leg.updatedAt).format('DD/MM/YYYY')} </div>
+                                                        )
+                                                    }
+                                                </TableCell>
+                                                <TableCell dense>
+                                                    <div className='d-flex align-items-center'>
+                                                        <span>
+                                                            <BiEdit style={{ color: "#06695C", fontSize: "16px", cursor: "pointer" }} onClick={() => handleEditLegend(leg)} />
+                                                        </span>
+                                                        {loadingProcess && leg.id === currentLegendIdToDelete && <CircularLoader small className='ml-2' />}
+                                                        <span className='ml-2'>
+                                                            <Popconfirm
+                                                                title="Delete legend"
+                                                                description="Are you sure to delete this legend ?"
+                                                                icon={
+                                                                    <QuestionCircleOutlined
+                                                                        style={{
+                                                                            color: 'red',
+                                                                        }}
+                                                                    />
+                                                                }
+                                                                onConfirm={() => handleDeleteLegend(leg.id)}
+                                                            >
+                                                                <RiDeleteBinLine style={{ color: "red", fontSize: "16px", cursor: "pointer" }} />
+                                                            </Popconfirm>
+                                                        </span>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        )) : (
+                                            <TableRow>
+                                                <TableCell dense colSpan="6"> No Legend </TableCell>
+                                            </TableRow>
+                                        )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </>
     )
 
+    const handleCancelSaveLegendPeriodModal = () => {
+        setStartDateForLegendSet(null)
+        setEndDateForLegendSet(null)
+        setGenerateErrorMessage(null)
+        setVisibleSaveLegendPeriodPopup(false)
+        setCurrentLegendPeriod(null)
+        setLegendItemList([])
+        setIsLegendCloned(false)
+    }
 
+    const getPeriodSetNameFromPeriod = (start, end) => {
+        let name = ''
+        if (start)
+            name = dayjs(start).format('YYYY-MM-DD')
+
+        if (end)
+            name = `${name}_${dayjs(end).format('YYYY-MM-DD')}`
+
+        return name
+    }
+
+    const getPeriodSetNameFromStringAsPeriodObject = (period_string) => {
+        let payload = { start: null, end: null }
+
+        if (period_string && period_string?.trim()?.length > 0) {
+            const periods = period_string.split('_')
+            if (periods[0])
+                payload.start = dayjs(periods[0]).format('YYYY-MM-DD')
+
+            if (periods[1])
+                payload.end = dayjs(periods[1]).format('YYYY-MM-DD')
+        }
+
+        return payload
+    }
+
+    const getPeriodSetNameFromStringAsPeriodName = (period_string) => {
+        let periodString = ''
+
+        if (period_string && period_string?.trim()?.length > 0) {
+            const periods = period_string.split('_') || []
+            periodString = periods.join('  to  ')
+        }
+
+        return periodString
+    }
+
+    const validateDateIfThereIsNoEndDate = async (periodList, start, end) => {
+        if (!end) {
+            const periods = periodList.map(p => getPeriodSetNameFromStringAsPeriodObject(p))?.filter(p => currentLegendPeriod ? getPeriodSetNameFromPeriod(p.start, p.end) !== currentLegendPeriod.name && !p.end : !p.end) || []
+            if (periods.length > 0)
+                throw new Error('There are already a period set with no end date created. May be you can close the period set with no end date  before add this !')
+            return true
+
+        } else {
+            return true
+        }
+    }
+
+    const validateIfIsAValideDate = async (periodList, start, end) => {
+        if (!end) {
+            const periods = periodList
+                .map(p => getPeriodSetNameFromStringAsPeriodObject(p))
+                .filter(p => currentLegendPeriod ? getPeriodSetNameFromPeriod(p.start, p.end) !== currentLegendPeriod.name : true)
+                .reduce((prev, current) => {
+                    const period = current
+                    if (
+                        (dayjs(period.start).isSame(dayjs(start)) || dayjs(period.start).isBefore(dayjs(start)))
+                    ) {
+                        prev.push(current)
+                    }
+                    return prev
+                }, [])
+
+            console.log("period: ", periods)
+            if (periods.length > 0)
+                throw new Error('There are already existing date range which cover your selected dates !')
+
+            return true
+        } else {
+            const periods = periodList
+                .map(p => getPeriodSetNameFromStringAsPeriodObject(p))
+                .filter(p => currentLegendPeriod ? getPeriodSetNameFromPeriod(p.start, p.end) !== currentLegendPeriod.name : true)
+                .reduce((prev, current) => {
+                    const period = current
+                    if (
+                        (dayjs(period.start).isSame(dayjs(start)) || dayjs(period.start).isBefore(dayjs(start))) &&
+                        ((period.end && dayjs(period.end).isSame(dayjs(end))) || (period.end && dayjs(period.end).isAfter(dayjs(end))))
+                    ) {
+                        prev.push(current)
+                    }
+                    return prev
+                }, [])
+
+            console.log("period: ", periods)
+
+            if (periods.length > 0)
+                throw new Error('There are already existing date range which cover your selected dates !')
+
+            return true
+        }
+    }
+
+    const handleSaveLegendPeriod = async () => {
+        try {
+            await validateDateIfThereIsNoEndDate(legendPeriods.map(l => l.name), startDateForLegendSet, endDateForLegendSet)
+
+            // await validateIfIsAValideDate(legendPeriods.map(l => l.name), startDateForLegendSet, endDateForLegendSet)
+
+            if (endDateForLegendSet && dayjs(startDateForLegendSet).isAfter(endDateForLegendSet))
+                throw new Error("The End Date must be gratter than Start Date !")
+
+            if (legendPeriods.map(l => l.name).includes(getPeriodSetNameFromPeriod(startDateForLegendSet, endDateForLegendSet)))
+                throw new Error('This legend is already added !')
+
+            let payload = {
+                name: getPeriodSetNameFromPeriod(startDateForLegendSet, endDateForLegendSet),
+                min: null,
+                max: null,
+                intervalSpace: null,
+                notApplicable: null,
+                defaultType: IMAGE,
+                missingData: null,
+                items: []
+            }
+
+            if (isLegendCloned) {
+                payload = {
+                    ...currentLegendPeriod,
+                    name: getPeriodSetNameFromPeriod(startDateForLegendSet, endDateForLegendSet),
+                }
+            }
+
+            setLegendPeriods(
+                [payload, ...legendPeriods]
+            )
+            setStartDateForLegendSet(null)
+            setEndDateForLegendSet(null)
+            setVisibleSaveLegendPeriodPopup(false)
+            setIsLegendCloned(false)
+            setCurrentLegendPeriod(null)
+            return setNotif({ show: true, message: isLegendCloned ? 'Legend Cloned !' : 'Legend added !', type: NOTIFICATON_SUCCESS })
+        } catch (err) {
+            setVisibleSaveLegendPeriodPopup(false)
+            return setNotif({ show: true, message: err.response?.data?.message || err.message, type: NOTIFICATON_CRITICAL })
+        }
+    }
+
+    const RenderAddLegendPeriodModal = () => visibleSaveLegendPeriodPopup && (
+        <Modal onHidden={handleCancelSaveLegendPeriodModal} small dense>
+            <ModalTitle> <div style={{ fontWeight: 'bold', fontSize: '15px' }}> {currentLegendPeriod && !isLegendCloned ? 'Update period ' : 'New period '} </div></ModalTitle>
+            <ModalContent>
+                <div className='border rounded p-3'>
+                    <div>
+                        <div style={{ fontSize: '14px' }}>Start Date ( <span style={{ color: 'red', marginLeft: '5px' }}> {` * `}</span> )</div>
+                        <div style={{ marginTop: '5px' }}>
+                            <DatePicker style={{ width: '100%' }} picker='date' value={startDateForLegendSet} onChange={value => setStartDateForLegendSet(value)} />
+                        </div>
+                    </div>
+                    <div style={{ marginTop: '10px' }}>
+                        <div style={{ fontSize: '14px' }}>End Date ( optional )</div>
+                        <div style={{ marginTop: '5px' }}>
+                            <DatePicker style={{ width: '100%' }} picker='date' value={endDateForLegendSet} onChange={value => setEndDateForLegendSet(value)} />
+                        </div>
+                    </div>
+                </div>
+            </ModalContent>
+            <ModalActions>
+                <ButtonStrip end>
+                    <Button small onClick={() => currentLegendPeriod && !isLegendCloned ? handleCancelLegendPeriodModification() : handleCancelSaveLegendPeriodModal()} destructive> Cancel </Button>
+                    <Button small primary onClick={() => currentLegendPeriod && !isLegendCloned ? handleSaveLegendPeriodModification() : handleSaveLegendPeriod()}>Save Period</Button>
+                </ButtonStrip>
+            </ModalActions>
+        </Modal>
+    )
+
+    const cancelFinishCreation = () => {
+        setVisibleNewLegendForm(false)
+        setCurrentLegend(null)
+        setCurrentLegendItem(null)
+        setCurrentLegendPeriod(null)
+        setLegendItemList(null)
+        setVisibleFinishCreateLegend(false)
+    }
+
+    const RenderFinishLegendCreationModal = () => visibleFinishCreateLegend && (
+        <Modal onHidden={cancelFinishCreation} small dense>
+            <ModalTitle> <div style={{ fontWeight: 'bold', fontSize: '15px' }}>Save legend </div></ModalTitle>
+            <ModalContent>
+                <div>
+                    <Field label="Legend name">
+                        <Input placeholder="Legend name" value={legendName} onChange={({ value }) => setLegendName(value)} />
+                    </Field>
+                </div>
+            </ModalContent>
+            <ModalActions>
+                <ButtonStrip end>
+                    <Button small onClick={cancelFinishCreation} destructive> Cancel </Button>
+                    <Button small loading={loadingProcess} disable={loadingProcess} primary onClick={handleSaveLegend}>Save legend</Button>
+                </ButtonStrip>
+            </ModalActions>
+        </Modal>
+    )
+
+    const handleUploadFile = async (file, setState) => {
+        try {
+            const current_file = file.target.files?.[0]
+            if (current_file) {
+                if (parseInt(current_file.size) / 1024 > 100)
+                    throw new Error('The file is too big. The file must not be gratter than 100Kb')
+                const base64_url = await getFileAsBase64(current_file)
+                setState && setState(base64_url)
+            }
+        } catch (err) {
+            setNotif({ show: true, message: err.response?.data?.message || err.message, type: NOTIFICATON_CRITICAL })
+        }
+    }
 
     const RenderAddItemModal = () => visibleAddLegendItem ? (
         <Modal onHidden={handleCancelAddItemLegend}>
@@ -412,13 +681,7 @@ const LegendPage = ({
                                     {/* {!visibleAddItemImageList && <Button icon={<RiImageAddFill style={{ fontSize: "16px" }} />} small onClick={() => setVisibleAddItemImageList(true)}> image</Button>} */}
                                     {
                                         !visibleAddItemImageList && (
-                                            <input type='file' onChange={async file => {
-                                                const current_file = file.target.files?.[0]
-                                                if (current_file) {
-                                                    const base64_url = await getFileAsBase64(current_file)
-                                                    setLegendItemImageSelected(base64_url)
-                                                }
-                                            }}
+                                            <input type='file' onChange={(file) => handleUploadFile(file, setLegendItemImageSelected)}
                                                 accept=".jpg, .jpeg, .png"
                                             />
                                         )
@@ -462,73 +725,86 @@ const LegendPage = ({
 
 
     const RenderLegendItemList = () => (
-        <div className='bg-white border rounded p-4 my-shadow mt-1'>
-            <div className='d-flex justify-content-between my-1'>
-                <h6 style={{ textDecoration: 'underline' }}> Legend Options List </h6>
+        <div className='bg-white border rounded p-3 my-shadow'>
+            <div className='d-flex justify-content-between'>
+                <div style={{ textDecoration: 'underline', fontWeight: 'bold' }}> Legend Options List  {currentLegendPeriod && <>  ( {getPeriodSetNameFromStringAsPeriodName(currentLegendPeriod.name)}  )  </>}</div>
                 <Button className="bg-light" onClick={handleNewLegendItemBtn} small>+ New Item</Button>
             </div>
-            <div>  <Table>
-                <TableHead>
-                    <TableRowHead className="bg-light">
-                        <TableCellHead dense>Name</TableCellHead>
-                        <TableCellHead dense>Interval</TableCellHead>
-                        <TableCellHead dense>Color</TableCellHead>
-                        <TableCellHead dense>Image</TableCellHead>
-                        <TableCellHead dense>Actions</TableCellHead>
-                    </TableRowHead>
-                </TableHead>
-                <TableBody>
-                    {legendItemList.length > 0 ? legendItemList.map(leg => (
-                        <TableRow key={leg.id}>
-                            <TableCell dense>
-                                {leg.name}
-                            </TableCell>
-                            <TableCell dense>
-                                {"".concat(leg.start).concat(" <===> ").concat(leg.end)}
-                            </TableCell>
-                            <TableCell dense>
-                                {leg.color && (
-                                    <div className='d-flex align-items-center justify-content-center' style={{ width: "60px", height: "30px", color: "#FFF", fontWeight: "bold", backgroundColor: leg.color, borderRadius: "6px" }}> {leg.color} </div>
-                                )}
-                            </TableCell>
-                            <TableCell dense>
-                                {leg.image && (
-                                    <img src={leg.image} style={{ height: "30px", width: "30px" }} />
-                                )}
-                            </TableCell>
-                            <TableCell dense>
-                                <div className='d-flex align-items-center'>
-                                    <span>
-                                        <BiEdit style={{ color: "#06695C", fontSize: "16px", cursor: "pointer" }} onClick={() => handleEditLegendItem(leg)} />
-                                    </span>
-                                    <span className='ml-2'>
-                                        <RiDeleteBinLine style={{ color: "red", fontSize: "16px", cursor: "pointer" }} onClick={() => handleDeleteLegendItem(leg.id)} />
-                                    </span>
-                                </div>
-                            </TableCell>
-                        </TableRow>
-                    )) : (
-                        <TableRow>
-                            <TableCell dense colSpan="6"> No Legend </TableCell>
-                        </TableRow>
-                    )}
-                </TableBody>
-            </Table>
+            <div className='mt-1'>
+                <Table>
+                    <TableHead>
+                        <TableRowHead className="bg-light">
+                            <TableCellHead dense>Name</TableCellHead>
+                            <TableCellHead dense>Interval</TableCellHead>
+                            <TableCellHead dense>Color</TableCellHead>
+                            <TableCellHead dense>Image</TableCellHead>
+                            <TableCellHead dense>Actions</TableCellHead>
+                        </TableRowHead>
+                    </TableHead>
+                    <TableBody>
+                        {legendItemList.length > 0 ? legendItemList.map(leg => (
+                            <TableRow key={leg.id}>
+                                <TableCell dense>
+                                    {leg.name}
+                                </TableCell>
+                                <TableCell dense>
+                                    {"".concat(leg.start).concat(" <===> ").concat(leg.end)}
+                                </TableCell>
+                                <TableCell dense>
+                                    {leg.color && (
+                                        <div className='d-flex align-items-center justify-content-center' style={{ width: "60px", height: "30px", color: "#FFF", fontWeight: "bold", backgroundColor: leg.color, borderRadius: "6px" }}> {leg.color} </div>
+                                    )}
+                                </TableCell>
+                                <TableCell dense>
+                                    {leg.image && (
+                                        <img src={leg.image} style={{ height: "30px", width: "30px" }} />
+                                    )}
+                                </TableCell>
+                                <TableCell dense>
+                                    <div className='d-flex align-items-center'>
+                                        <span>
+                                            <BiEdit style={{ color: "#06695C", fontSize: "16px", cursor: "pointer" }} onClick={() => handleEditLegendItem(leg)} />
+                                        </span>
+                                        <span className='ml-2'>
+                                            <Popconfirm
+                                                title="Delete period"
+                                                description="Are you sure to delete this legend ?"
+                                                icon={
+                                                    <QuestionCircleOutlined
+                                                        style={{
+                                                            color: 'red',
+                                                        }}
+                                                    />
+                                                }
+                                                onConfirm={() => handleDeleteLegendItem(leg.id)}
+                                            >
+                                                <RiDeleteBinLine style={{ color: "red", fontSize: "16px", cursor: "pointer" }} />
+                                            </Popconfirm>
+                                        </span>
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        )) : (
+                            <TableRow>
+                                <TableCell dense colSpan="6"> No Legend </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
             </div>
         </div>
     )
-
 
     const RenderLegendDefaultTypeLabel = () => (
         <>
             <div className='row'>
                 <div className='col-md'>
-                    <Field label="Default name if data missing:">
+                    <Field label="Default name if data missing">
                         <Input placeholder="Missing data" value={legendDefaultMissingData} onChange={({ value }) => setLegendDefaultMissingData(value)} />
                     </Field>
                 </div>
                 <div className='col-md'>
-                    <Field label="Default name if data is not applicable:">
+                    <Field label="Default name if data is not applicable">
                         <Input placeholder="Not applicable legend" value={legendDefaultNotApplicable} onChange={({ value }) => setLegendDefaultNotApplicable(value)} />
                     </Field>
                 </div>
@@ -540,7 +816,7 @@ const LegendPage = ({
     const RenderLegendDefaultTypeImage = () => (
         <>
             <div className='row mt-3'>
-                <div className='col-md'>
+                <div className='col-md-12'>
                     <div>
                         <div >Default image if data is missing </div>
                         <div>
@@ -550,22 +826,9 @@ const LegendPage = ({
                                 </div>
                                 )}
                                 <div className='d-flex align-items-center'>
-                                    {/* {!visibleDefaultLegendImageMissingData &&
-                                        (
-                                            <div className='mr-2'>
-                                                <Button icon={<RiImageAddFill style={{ fontSize: "16px" }} />} small onClick={() => setVisibleDefaultLegendImageMissingData(true)}>  image</Button>
-                                            </div>
-                                        )
-                                    } */}
                                     {!visibleDefaultLegendImageMissingData &&
                                         (
-                                            <input className='mt-2' type='file' onChange={async file => {
-                                                const current_file = file.target.files?.[0]
-                                                if (current_file) {
-                                                    const base64_url = await getFileAsBase64(current_file)
-                                                    setLegendDefaultMissingData(base64_url)
-                                                }
-                                            }}
+                                            <input className='mt-2' type='file' onChange={(file) => handleUploadFile(file, setLegendDefaultMissingData)}
                                                 accept=".jpg, .jpeg, .png"
                                             />
                                         )
@@ -575,22 +838,10 @@ const LegendPage = ({
                             </div>
                         </div>
                     </div>
-                    <div className='mt-2' >
-                        {visibleDefaultLegendImageMissingData && (
-                            <div className='my-3'>
-                                <div className='p-2 bg-light' style={{ display: "flex", alignItems: "center", border: "1px solid #ccc", borderRadius: "5px", flexWrap: "wrap" }}>
-                                    {dataStoreReports.images.map(image => (
-                                        <div style={{ cursor: "pointer", transition: "all 0.4s ease" }} className={'mr-2 image-item'.concat(visibleDefaultLegendImageMissingData === image.value ? " active" : "")} key={image.id} onClick={() => setLegendDefaultMissingData(image.value)}>
-                                            <img src={image.value} style={{ height: "30px", width: "30px" }} />
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>)
-                        }
-                    </div>
+
                 </div>
 
-                <div className='col-md mt-4'>
+                <div className='col-md-12 mt-4'>
                     <div>
                         <div>Default image if data is not applicable </div>
                         <div>
@@ -603,23 +854,11 @@ const LegendPage = ({
                                     )
                                 }
                                 <div className='d-flex align-items-center'>
-                                    {/* {
-                                        !visibleDefaultLegendImageNotApplicable && (
-                                            <div className='mr-2'>
-                                                <Button small onClick={() => setVisibleDefaultLegendImageNotApplicable(true)} icon={<RiImageAddFill style={{ fontSize: "16px" }} />}>  image</Button>
-                                            </div>
-                                        )
-                                    } */}
+
                                     {
                                         !visibleDefaultLegendImageNotApplicable &&
                                         (
-                                            <input className='mt-2' type='file' onChange={async file => {
-                                                const current_file = file.target.files?.[0]
-                                                if (current_file) {
-                                                    const base64_url = await getFileAsBase64(current_file)
-                                                    setLegendDefaultNotApplicable(base64_url)
-                                                }
-                                            }}
+                                            <input className='mt-2' type='file' onChange={file => handleUploadFile(file, setLegendDefaultNotApplicable)}
                                                 accept=".jpg, .jpeg, .png"
                                             />
                                         )
@@ -633,27 +872,10 @@ const LegendPage = ({
                             </div>
                         </div>
                     </div>
-                    <div className='mt-2' >
-                        {
-                            visibleDefaultLegendImageNotApplicable && (
-                                <div className='my-3'>
-                                    <div className='p-2 bg-light' style={{ display: "flex", alignItems: "center", border: "1px solid #ccc", borderRadius: "5px", flexWrap: "wrap" }}>
-                                        {dataStoreReports.images.map(image => (
-                                            <div style={{ cursor: "pointer", transition: "all 0.4s ease" }} className={'mr-2 image-item'.concat(legendDefaultNotApplicable === image.value ? " active" : "")} key={image.id} onClick={() => setLegendDefaultNotApplicable(image.value)}>
-                                                <img src={image.value} style={{ height: "30px", width: "30px" }} />
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )
-                        }
-                    </div>
                 </div>
             </div>
         </>
     )
-
-
 
     const RenderLegendDefaultTypeColor = () => (
         <>
@@ -694,6 +916,80 @@ const LegendPage = ({
         </>
     )
 
+    const handleSaveLegendPeriodModification = async () => {
+        try {
+
+            setGenerateErrorMessage(null)
+
+            await validateDateIfThereIsNoEndDate(legendPeriods.map(l => l.name), startDateForLegendSet, endDateForLegendSet)
+
+            // await validateIfIsAValideDate(legendPeriods.map(l => l.name), startDateForLegendSet, endDateForLegendSet)
+
+
+            if (!currentLegendPeriod)
+                throw new Error("Please select period")
+
+            if (!min)
+                throw new Error("The min value is required")
+
+            if (!max)
+                throw new Error("The max value is required")
+
+            if (!intervalSpace)
+                throw new Error('The interval is required')
+
+            if (parseFloat(max) <= parseFloat(min))
+                throw new Error("The Max value must be gratter than min value")
+
+            if (!legendDefaultMissingData)
+                throw new Error('The Default value when data is missing is required')
+
+            if (!legendDefaultNotApplicable)
+                throw new Error('The Default value when data is not application is required')
+
+            if (legendItemList.length === 0)
+                throw new Error('Please add some legend items !')
+
+            const payload = {
+                ...currentLegendPeriod,
+                name: getPeriodSetNameFromPeriod(startDateForLegendSet, endDateForLegendSet),
+                defaultType: legendDefaultType,
+                missingData: legendDefaultMissingData,
+                notApplicable: legendDefaultNotApplicable,
+                items: legendItemList,
+                intervalSpace: intervalSpace,
+                max: max,
+                min: min,
+            }
+
+            setLegendPeriods(legendPeriods.map(leg => leg.name === currentLegendPeriod.name ? payload : leg))
+            setNotif({ show: true, message: `Period ${currentLegendPeriod.name} has been updated`, type: NOTIFICATON_SUCCESS })
+
+            setCurrentLegendPeriod(null)
+            setMin(null)
+            setIntervalSpace(null)
+            setMax(null)
+            setLegendDefaultMissingData(null)
+            setLegendDefaultNotApplicable(null)
+            setLegendItemList([])
+            setIsLegendCloned(false)
+            setStartDateForLegendSet(null)
+            setEndDateForLegendSet(null)
+            setVisibleSaveLegendPeriodPopup(false)
+            setStartDateForLegendSet(null)
+            setEndDateForLegendSet(null)
+
+        } catch (err) {
+            console.log("err:", err)
+            // setNotif({ show: true, message: 'There are already a period set with no end date created. May be you can close the period set with no end date  before add this !', type: NOTIFICATON_CRITICAL })
+            setNotif({ show: true, message: err.message, type: NOTIFICATON_CRITICAL })
+            return setGenerateErrorMessage(err.message)
+        }
+    }
+
+
+
+
     const handleGenerateLegendOption = () => {
         setGenerateErrorMessage(null)
 
@@ -708,20 +1004,6 @@ const LegendPage = ({
 
         if (parseFloat(max) <= parseFloat(min))
             return setGenerateErrorMessage("The Max value must be gratter than min value")
-
-        // if (parseFloat(intervalSpace) <= parseFloat(0) || parseFloat(intervalSpace) > parseFloat(max))
-        //     return setGenerateErrorMessage("The Interval values must be valid and between min and max values ")
-
-        if (!legendName || legendName?.length === 0)
-            return setGenerateErrorMessage('The legend name is required')
-
-        if (!legendDefaultMissingData)
-            return setGenerateErrorMessage('The Default value when data is missing is required')
-
-        if (!legendDefaultNotApplicable)
-            return setGenerateErrorMessage('The Default value when data is not application is required')
-
-
 
         const pas = (parseFloat(max) - parseFloat(min)) / parseFloat(intervalSpace)
 
@@ -746,13 +1028,32 @@ const LegendPage = ({
             }
         }
 
-
         setLegendItemList(listOptions)
+    }
 
+
+    const handleCancelLegendPeriodModification = () => {
+        setCurrentLegendPeriod(null)
+        setGenerateErrorMessage(null)
+        setMin(null)
+        setMax(null)
+        setIntervalSpace(null)
+        setLegendItemList([])
+        setLegendDefaultMissingData(null)
+        setLegendDefaultNotApplicable(null)
+        setLegendDefaultType(IMAGE)
+        setIsLegendCloned(false)
+        setVisibleSaveLegendPeriodPopup(false)
+        setStartDateForLegendSet(null)
+        setEndDateForLegendSet(null)
     }
 
     const RenderNewLegendGroupForm = () => (
-        <div className='border rounded p-4 mt-2 my-shadow bg-white'>
+        <div className='border rounded p-3 my-shadow bg-white'>
+            <div className='my-3' style={{ fontWeight: 'bold', textDecoration: 'underline' }}>
+                Period  {currentLegendPeriod && <>  ( {getPeriodSetNameFromStringAsPeriodName(currentLegendPeriod.name)} )  </>}
+            </div>
+
             {
                 generateErrorMessage && (
                     <NoticeBox error title="Legend Error Message">
@@ -760,59 +1061,54 @@ const LegendPage = ({
                     </NoticeBox>
                 )
             }
-            <div>
-                <Field label="Legend name">
-                    <Input placeholder="Legend name" value={legendName} onChange={({ value }) => setLegendName(value)} />
-                </Field>
-            </div>
+            <div className='row mt-2'>
+                <div className='col-md-6'>
+                    <Field label="Min value">
+                        <Input
+                            name="min"
+                            onChange={({ value }) => setMin(value)}
+                            value={min}
+                            type="number"
+                            placeholder="Min value"
+                        />
+                    </Field>
+                </div>
+                <div className='col-md-6'>
+                    <Field label="Max value">
+                        <Input
+                            name="max"
+                            onChange={({ value }) => setMax(value)}
+                            value={max}
+                            type="number"
+                            placeholder="Max value"
+                        />
+                    </Field>
+                </div>
+                <div className='col-md-12 mt-2'>
+                    <Field label="Interval value">
+                        <SingleSelect
+                            placeholder="Interval value"
+                            onChange={({ selected }) => setIntervalSpace(selected)}
+                            selected={intervalSpace}>
+                            <SingleSelectOption label="3" value='3' />
+                            <SingleSelectOption label="4" value='4' />
+                            <SingleSelectOption label="5" value='5' />
+                            <SingleSelectOption label="6" value='6' />
+                            <SingleSelectOption label="7" value='7' />
+                            <SingleSelectOption label="8" value='8' />
+                            <SingleSelectOption label="9" value='9' />
+                        </SingleSelect>
+                    </Field>
+                </div>
+                <div className='col-md-12 mt-3'>
+                    <Button onClick={handleGenerateLegendOption} small primary>Generate legend options</Button>
+                </div>
 
-            <div className='mt-2'>
-                <div className='row'>
-                    <div className='col'>
-                        <Field label="Min value">
-                            <Input
-                                name="min"
-                                onChange={({ value }) => setMin(value)}
-                                value={min}
-                                type="number"
-                                placeholder="Min value"
-                            />
-                        </Field>
-                    </div>
-                    <div className='col'>
-                        <div className='col'>
-                            <Field label="Max value">
-                                <Input
-                                    name="max"
-                                    onChange={({ value }) => setMax(value)}
-                                    value={max}
-                                    type="number"
-                                    placeholder="Max value"
-                                />
-                            </Field>
-                        </div>
-                    </div>
-                    <div className='col'>
-                        <div className='col'>
-                            <Field label="Interval value">
-                                <SingleSelect
-                                    placeholder="Interval value"
-                                    onChange={({ selected }) => setIntervalSpace(selected)}
-                                    selected={intervalSpace}>
-                                    <SingleSelectOption label="3" value='3' />
-                                    <SingleSelectOption label="4" value='4' />
-                                    <SingleSelectOption label="5" value='5' />
-                                    <SingleSelectOption label="6" value='6' />
-                                    <SingleSelectOption label="7" value='7' />
-                                    <SingleSelectOption label="8" value='8' />
-                                    <SingleSelectOption label="9" value='9' />
-                                </SingleSelect>
-                            </Field>
-                        </div>
-                    </div>
+                <div className='col-md-12 mt-3'>
+                    <Divider style={{ margin: '0px' }} />
                 </div>
             </div>
-            <div className='mt-2'>
+            <div className='mt-3'>
                 <Field label="Legend Type">
                     <SingleSelect placeholder="Legend Type" onChange={handleChangeTypeLegend} selected={legendDefaultType}>
                         <SingleSelectOption label="Image" value={IMAGE} />
@@ -827,22 +1123,140 @@ const LegendPage = ({
                 {legendDefaultType === COLOR && RenderLegendDefaultTypeColor()}
             </div>
 
-            <div className='mt-4'>
-                <Button onClick={handleGenerateLegendOption} primary>Generate legend options</Button>
+            <div className='mt-4 d-flex'>
+                <div>
+                    <Button destructive onClick={handleCancelLegendPeriodModification}>Cancel</Button>
+                </div>
+                <div style={{ marginLeft: '5px' }}>
+                    <Button
+                        icon={<FiSave style={{ color: '#FFF', fontSize: '18px' }} />}
+                        onClick={() => setVisibleSaveLegendPeriodPopup(true)}
+                        primary
+                    >Update modifications</Button>
+                </div>
             </div>
         </div>
     )
 
-    const RenderNewLegendForm = () => (
-        <>
-            <div className='d-flex align-items-center justify-content-between py-2'>
-                <h5>New Legend</h5>
-                <div className='d-flex'>
-                    <Button destructive onClick={handleCancelSaveLegend}>Cancel</Button>
-                    <Button className="ml-3" loading={loadingSendDatas || loadingDataStoreReports} primary onClick={handleSaveLegend}>{editLegend && currentLegend ? "Update Legend " : "Save Legend"}</Button>
+    const handlClonePeriod = (value) => {
+        setIsLegendCloned(true)
+        setVisibleSaveLegendPeriodPopup(true)
+        setCurrentLegendPeriod(value)
+    }
+
+    const handleEditLegendPeriod = (value) => {
+        setCurrentLegendPeriod(value)
+        setMin(value.min)
+        setMax(value.max)
+        setIntervalSpace(value.intervalSpace)
+        setLegendDefaultMissingData(value.missingData)
+        setLegendDefaultNotApplicable(value.notApplicable)
+        setLegendDefaultType(value.defaultType)
+        setLegendItemList(value.items)
+        setStartDateForLegendSet(getPeriodSetNameFromStringAsPeriodObject(value.name)?.start && dayjs(getPeriodSetNameFromStringAsPeriodObject(value.name)?.start))
+        setEndDateForLegendSet(getPeriodSetNameFromStringAsPeriodObject(value.name)?.end && dayjs(getPeriodSetNameFromStringAsPeriodObject(value.name)?.end))
+    }
+
+    const handleDeletelegendPeriod = (name) => {
+        try {
+
+            if (name) {
+                setCurrentLegendPeriod(null)
+                setMin(null)
+                setMax(null)
+                setIntervalSpace(null)
+                setLegendDefaultMissingData(null)
+                setLegendDefaultNotApplicable(null)
+                setLegendItemList([])
+
+                setLegendPeriods(legendPeriods.filter(el => dayjs(el.name).format('YYYY') !== dayjs(name).format('YYYY')))
+
+                setNotif({ show: true, message: "Period delete", type: NOTIFICATON_SUCCESS })
+            }
+        } catch (err) {
+            setNotif({ show: true, message: err.message, type: NOTIFICATON_CRITICAL })
+        }
+    }
+
+    const RenderPeriodLegendList = () => (
+        <div className='col-md-3' style={{ position: 'sticky', top: '50px' }}>
+            <div className='my-shadow bg-white p-3 rounded'>
+                <div className="d-flex justify-content-between">
+                    <div style={{ fontWeight: 'bold', textDecoration: 'underline' }}>Periods</div>
+                    <Button primary small onClick={() => setVisibleSaveLegendPeriodPopup(true)}>+ Add</Button>
+                </div>
+
+                <div className='mt-2'>
+                    {
+                        legendPeriods.length === 0 && (<div>List's empty !</div>)
+                    }
+                    {
+                        legendPeriods.length > 0 && (
+                            <TableAntd
+                                size='small'
+                                bordered
+                                style={{ width: '100%' }}
+                                pagination={false}
+                                dataSource={
+                                    legendPeriods.sort((a, b) => {
+                                        const aObject = getPeriodSetNameFromStringAsPeriodObject(a.name)
+                                        const bObject = getPeriodSetNameFromStringAsPeriodObject(b.name)
+                                        return dayjs(aObject.start).isBefore(bObject.start) ? 1 : -1
+                                    })
+                                        .map(l => ({ ...l, nom: l.name, item: l }))
+                                }
+                                columns={
+                                    [
+                                        { title: "Nom", dataIndex: 'nom', render: nom => (<div>{getPeriodSetNameFromStringAsPeriodName(nom)}</div>) },
+                                        {
+                                            title: 'Actions', dataIndex: 'item',
+                                            width: '100px',
+                                            render: value => (
+                                                <div style={{ display: 'flex', alignItems: 'center' }}>
+
+                                                    <div>
+                                                        <Popover content="Edit" trigger="hover">
+                                                            <TiEdit style={{ fontSize: '18px', cursor: 'pointer' }} onClick={() => handleEditLegendPeriod(value)} />
+                                                        </Popover>
+                                                    </div>
+                                                    <div className='ml-2'>
+                                                        <Popover content="Clone" trigger="hover">
+                                                            <FaRegClone style={{ fontSize: '15px', cursor: 'pointer' }} onClick={() => handlClonePeriod(value)} />
+                                                        </Popover>
+                                                    </div>
+                                                    <div className='ml-2'>
+                                                        <Popover content="Delete" trigger="hover">
+                                                            <Popconfirm
+                                                                title="Delete period"
+                                                                description="Are you sure to delete this period ?"
+                                                                icon={
+                                                                    <QuestionCircleOutlined
+                                                                        style={{
+                                                                            color: 'red',
+                                                                        }}
+                                                                    />
+                                                                }
+                                                                onConfirm={() => handleDeletelegendPeriod(value.name)}
+                                                            >
+                                                                <RiDeleteBinLine style={{ color: "red", fontSize: "18px", cursor: "pointer" }} />
+                                                            </Popconfirm>
+                                                        </Popover>
+                                                    </div>
+                                                </div>
+                                            )
+                                        }
+                                    ]
+                                }
+                            />
+                        )
+                    }
                 </div>
             </div>
-            <hr />
+        </div>
+    )
+
+    const RenderLegendPeriodElementContent = () => (
+        <div className="col-md-9">
             <div className='row'>
                 <div className='col-md-5'>
                     {RenderNewLegendGroupForm()}
@@ -851,13 +1265,38 @@ const LegendPage = ({
                     {RenderLegendItemList()}
                 </div>
             </div>
+        </div>
+    )
+
+    const RenderNewLegendForm = () => (
+        <>
+            <div className='d-flex align-items-center justify-content-between p-2 bg-white' style={{ position: 'sticky', top: '0px', zIndex: 100 }}>
+                <div style={{ fontWeight: 'bold', fontSize: '15px' }}> {currentLegend && editLegend ? `Update legend : ( ${currentLegend?.name} )` : "New Legend"} </div>
+                <div className='d-flex'>
+                    <Button destructive onClick={handleCancelSaveLegend}>Cancel</Button>
+                    <Button
+                        icon={<FiSave style={{ color: '#FFF', fontSize: '18px' }} />}
+                        className="ml-3"
+                        primary
+                        onClick={() => setVisibleFinishCreateLegend(true)}
+                    >{editLegend && currentLegend ? "Update Legend " : "Save All Legends"}</Button>
+                </div>
+            </div>
+            <hr />
+            <div className='row p-2'>
+                {RenderPeriodLegendList()}
+                {currentLegendPeriod && !isLegendCloned && RenderLegendPeriodElementContent()}
+            </div>
         </>
     )
 
     return (
         <div className='mt-2'>
+            {console.log("Legend ", legendItemList)}
             {visibleNewLegendForm ? RenderNewLegendForm() : RenderLegendTable()}
             {RenderAddItemModal()}
+            {RenderAddLegendPeriodModal()}
+            {RenderFinishLegendCreationModal()}
         </div>
     )
 }

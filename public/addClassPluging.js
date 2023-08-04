@@ -33,7 +33,6 @@
             }
             if (typeof context.options.addclass.classTags === 'undefined') {
                 context.options.addclass.classTags = ["jumbotron", "lead","img-rounded","img-circle", "img-responsive","btn", "btn btn-success","btn btn-danger","text-muted", "text-primary", "text-warning", "text-danger", "text-success", "table-bordered", "table-responsive", "alert", "alert alert-success", "alert alert-info", "alert alert-warning", "alert alert-danger", "visible-sm", "hidden-xs", "hidden-md", "hidden-lg", "hidden-print"];
-                //  console.log("Please define your summernote.options.addclass.classTags array");
             }
             // ui has renders to build ui elements.
             //  - you can create a button with `ui.button`

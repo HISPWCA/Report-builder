@@ -202,32 +202,18 @@ const OrganisationUnitsTree = ({
       {
         tree.length > 0 && (
           <>
-            {/* <div className='my-2 d-flex align-items-center w-100'>
-              <Input value={inputText} onChange={onInputTextChange} placeholder="Search organisation units" />
-              <div style={{ marginLeft: '10px' }}>
-                <Button onClick={searchAndUpdateTreeView} primary>Search</Button>
-              </div>
-            </div> {console.log(loadingSearch)} */}
-
             <div>
               <TreeSelect
                 loading={loadingOrganisationUnits}
                 showSearch
-                treeDefaultExpandAll
-                size='large'
                 style={{
                   width: '100%',
                 }}
                 dropdownStyle={{
                   maxHeight: 400,
-                  overflow: 'auto',
                 }}
                 placeholder="Select organisation unit"
                 allowClear
-                // treeExpandedKeys={expandedKeys.length > 0 ? expandedKeys : tree.length > 0 ? [tree[0].id] : []}
-                onTreeExpand={value => {
-                  setExpandedKeys(value)
-                }}
                 value={currentOrgUnits?.length > 0 ? currentOrgUnits[0].id : null}
                 onChange={value => setCurrentOrgUnits(orgUnits.filter(ou => ou.id === value))}
                 treeData={tree}

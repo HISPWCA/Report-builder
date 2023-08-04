@@ -1,5 +1,5 @@
 .my-menu {
-    padding: 5px 10px;
+    padding: 10px;
     cursor: pointer;
     transition: all 0.3s ease-in-out;
 }
@@ -8,7 +8,7 @@
 .my-menu:hover {
     background: #eee;
     font-weight: bold;
-    border-radius: 5px;
+    border-radius: 2px;
     margin: 2px 0px;
 }
 
@@ -16,7 +16,7 @@
     background-color: #06695C;
     color: #fff;
     font-weight: bold;
-    border-radius: 5px;
+    border-radius: 2px;
 }
 
 .my-dx {
@@ -69,5 +69,63 @@
 }
 
 body {
-    overflow: hidden !important;
+    font-size: 14px !important;
+}
+
+* {
+    margin: 0px;
+    padding: 0px;
+}
+
+.my-scrollable::-webkit-scrollbar {
+    overflow: auto !important;
+    width: 5px !important;
+}
+
+.my-scrollable::-webkit-scrollbar-track {
+    box-shadow: inset 0 0 5px rgba(184, 183, 183, 0.578) !important;
+    border-radius: 10px !important;
+}
+
+.my-scrollable::-webkit-scrollbar-thumb {
+    background: rgba(199, 199, 199, 0.593) !important;
+    border-radius: 20px !important;
+}
+
+.my-scrollable::-webkit-scrollbar-thumb:hover {
+    background: #484848 !important;
+}
+
+
+
+.text-truncate-two {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    width: 100%;
+}
+
+.text-truncate-one {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    width: 100%;
+}
+
+.text-truncate-tree {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    width: 100%;
+}
+
+.text-truncate-four {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    width: 100%;
 }

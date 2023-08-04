@@ -15,22 +15,24 @@ import {
 
 import { TbReport } from 'react-icons/tb'
 import { SMS_ROUTE_API } from '../api.routes'
-import { AGGREGATE, IMAGE, OTHER_ELEMENT, STUDENT_IMAGE, TRACKER } from '../utils/constants'
+import { AGGREGATE, IMAGE, NOTIFICATON_CRITICAL, NOTIFICATON_SUCCESS, OTHER_ELEMENT, STUDENT_IMAGE, TRACKER } from '../utils/constants'
 
 const ReportsPage = ({
     selectedReport,
     setSearchProperties,
     searchProperties,
     searchByAttribute,
-    setNotification,
     queryTeiList,
     selectedTEI,
-    dataStoreReports,
-    currentOrgUnits
+    currentOrgUnits,
+    setNotif,
+    smsConfigs
+
 }) => {
 
     const [loadingTeiProcess, setLoadingTeiProcess] = useState(false)
     const [loadingSendSMS, setLoadingSendSMS] = useState(false)
+
 
     const [visibleSendSMSModal, setVisibleSendSMSModal] = useState(false)
     const [selectedTemplate, setSelectedTemplate] = useState(null)
@@ -140,13 +142,12 @@ const ReportsPage = ({
             if (response.status === "ERROR")
                 throw response
 
-
-            setNotification({ type: "SMS Sended", message: "SMS sended" })
+            setNotif({ show: true, message: 'SMS Sended !', type: NOTIFICATON_SUCCESS })
             setLoadingSendSMS(false)
             setSelectedTemplate(null)
             setVisibleSendSMSModal(false)
         } catch (err) {
-            setNotification({ type: "error", message: err.message })
+            setNotif({ show: true, message: err.message, type: NOTIFICATON_CRITICAL })
             setLoadingSendSMS(false)
         }
     }
@@ -160,10 +161,10 @@ const ReportsPage = ({
             <ModalContent>
 
                 {
-                    dataStoreReports.smsConfigs?.length > 0 ? (
+                    smsConfigs?.length > 0 ? (
                         <Field label="SMS Template ">
-                            <SingleSelect placeholder="Select template " selected={selectedTemplate?.id} onChange={({ selected }) => setSelectedTemplate(dataStoreReports.smsConfigs?.find(conf => conf.id === selected))} >
-                                {dataStoreReports.smsConfigs.map(template => (<SingleSelectOption key={template.id} value={template.id} label={template.name} />))}
+                            <SingleSelect placeholder="Select template " selected={selectedTemplate?.id} onChange={({ selected }) => setSelectedTemplate(smsConfigs?.find(conf => conf.id === selected))} >
+                                {smsConfigs.map(template => (<SingleSelectOption key={template.id} value={template.id} label={template.name} />))}
                             </SingleSelect>
                         </Field>
 
@@ -188,6 +189,7 @@ const ReportsPage = ({
             </ModalActions>
         </Modal>
     ) : (<></>)
+
 
     useEffect(() => {
         if (selectedReport) {
@@ -224,45 +226,47 @@ const ReportsPage = ({
 
 
     return (
-        <div style={{ overflow: "hidden" }}>
-            <div className="bg-white py-2 d-flex align-items-center justify-content-center">
+        <div>
+            <div className="bg-white py-2 d-flex align-items-center justify-content-center my-shadow" style={{ position: 'sticky', top: '0px', zIndex:100 }}>
                 <div className="mr-2">
                     <TbReport style={{ fontSize: "50px", color: "#06695C" }} />
                 </div>
                 <div style={{ fontSize: "24px" }} className='font-weight-bold'>Report Builder</div>
             </div>
-            {selectedReport && searchProperties && searchByAttribute && (
-                <div className='d-flex align-items-center justify-content-center mt-2'>
-                    <div>Search by properties : </div>
-                    {searchProperties.map((p, index) => (
-                        <Input className="ml-2" placeholder={p.trackedEntityAttribute?.name} value={p.value} onChange={({ value }) => handleSearchInput(value, index)} />
-                    ))}
-                    <Button className="ml-2" loading={loadingTeiProcess} disabled={currentOrgUnits.length > 0 ? false : true} onClick={() => queryTeiList()}>Search</Button>
-                </div>
-            )
-            }
-
-            {
-                selectedReport && <div className='mt-2 d-flex justify-content-center align-items-center'>
-                    <Button primary onClick={printReportAsPDF}>Print report</Button>
-                    {selectedTEI && <Button className="ml-2" loading={loadingSendSMS} onClick={() => setVisibleSendSMSModal(true)}>Send SMS</Button>}
-                </div>
-            }
-
-            {
-                selectedReport ? (
-                    <div style={{ margin: '0px auto' }}>
-                        <div className='mt-1' id="my-table-container" style={{ fontSize: "12px", maxWidth: "900px", margin: "0px auto" }} dangerouslySetInnerHTML={{ __html: selectedReport && selectedReport.html || "" }} />
-                    </div>
-                ) : (
-                    <div className='mt-2'>
-                        <NoticeBox title="Report" warning>
-                            No report selected !
-                        </NoticeBox>
+            <div style={{ padding: '10px' }}>
+                {selectedReport && searchProperties && searchByAttribute && (
+                    <div className='d-flex align-items-center justify-content-center mt-2'>
+                        <div>Search by properties : </div>
+                        {searchProperties.map((p, index) => (
+                            <Input className="ml-2" placeholder={p.trackedEntityAttribute?.name} value={p.value} onChange={({ value }) => handleSearchInput(value, index)} />
+                        ))}
+                        <Button className="ml-2" loading={loadingTeiProcess} disabled={currentOrgUnits.length > 0 ? false : true} onClick={() => queryTeiList()}>Search</Button>
                     </div>
                 )
-            }
-            {SendSMSModal()}
+                }
+
+                {
+                    selectedReport && <div className='mt-2 d-flex justify-content-center align-items-center'>
+                        <Button primary onClick={printReportAsPDF}>Print report</Button>
+                        {selectedTEI && <Button className="ml-2" loading={loadingSendSMS} onClick={() => setVisibleSendSMSModal(true)}>Send SMS</Button>}
+                    </div>
+                }
+
+                {
+                    selectedReport ? (
+                        <div style={{ margin: '0px auto' }}>
+                            <div className='mt-1' id="my-table-container" style={{ fontSize: "12px", maxWidth: "900px", margin: "0px auto" }} dangerouslySetInnerHTML={{ __html: selectedReport && selectedReport.html || "" }} />
+                        </div>
+                    ) : (
+                        <div className='mt-2'>
+                            <NoticeBox title="Report" warning>
+                                No report selected !
+                            </NoticeBox>
+                        </div>
+                    )
+                }
+                {SendSMSModal()}
+            </div>
         </div>
     )
 }

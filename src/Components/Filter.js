@@ -11,33 +11,34 @@ import {
     ModalActions,
     ButtonStrip,
     CircularLoader,
-    NoticeBox
-
+    NoticeBox,
 } from '@dhis2/ui'
 import { ORGANISATION_UNITS_ROUTE, ORGANISATION_UNIT_LEVELS_ROUTE, ME_ROUTE, PROGRAMS_ROUTE } from '../api.routes'
 
-import { AGGREGATE, DATA_ELEMENT, PAGE_DESIGN, PAGE_REPORT, TRACKER } from "../utils/constants"
-import OrganisationUnitsTree from './OrganisationUnitsTree';
+import { AGGREGATE, DATA_ELEMENT, DAY, MONTH, PAGE_DESIGN, PAGE_REPORT, QUARTER, TRACKER, WEEK, YEAR } from "../utils/constants"
+import OrganisationUnitsTree from './OrganisationUnitsTree'
+import { DatePicker } from 'antd'
 
 
+const PeriodFieldType = ({ setState, state, setSelectedPeriod }) => {
 
-const PeriodField = ({ setState, state }) => {
-
-    const handleSelectPeriod = ({ selected }) => setState(selected)
+    const handleSelectPeriodType = ({ selected }) => {
+        setState(selected)
+        setSelectedPeriod(null)
+    }
 
     return (
-        <Field label="Period ( years )">
+        <Field label="Period type">
             <SingleSelect
-                placeholder='Year'
+                placeholder='Period type'
                 selected={state}
-                onChange={handleSelectPeriod}
+                onChange={handleSelectPeriodType}
             >
-                <SingleSelectOption label="2023" value="2023" />
-                <SingleSelectOption label="2022" value="2022" />
-                <SingleSelectOption label="2021" value="2021" />
-                <SingleSelectOption label="2020" value="2020" />
-                <SingleSelectOption label="2019" value="2019" />
-                <SingleSelectOption label="2018" value="2018" />
+                <SingleSelectOption label="Daily" value={DAY} />
+                <SingleSelectOption label="Monthly" value={MONTH} />
+                <SingleSelectOption label="Yearly" value={YEAR} />
+                {/* <SingleSelectOption label="Quarterly" value={QUARTER} />
+                <SingleSelectOption label="Weekly" value={WEEK} /> */}
             </SingleSelect>
         </Field>
     )
@@ -45,7 +46,6 @@ const PeriodField = ({ setState, state }) => {
 
 const Filter = ({
     renderPage,
-    dataStoreReports,
     isDataStoreReportsCreated,
     orgUnits,
     setOrgUnits,
@@ -81,14 +81,15 @@ const Filter = ({
     selectedPeriod,
     handleUpdateInformation,
     loadingGetDatas,
+    loadingLegends,
     setDataElementsFromHTML,
-    dataElementsFromHTML
+    reports,
+    setSelectedPeriodType,
+    selectedPeriodType,
 }) => {
     const [visibleOrgUnit, setVisibleOrgUnit] = useState(false)
     const [programs, setPrograms] = useState([])
-
     const [loadingPrograms, setLoadingPrograms] = useState(false)
-
 
 
     const loadOrgUnitLevels = async _ => {
@@ -123,12 +124,9 @@ const Filter = ({
             }
 
         } catch (err) {
-            console.log(err)
             setLoadingOrganisations(false)
         }
     }
-
-
 
     const loadPrograms = async _ => {
         try {
@@ -146,7 +144,6 @@ const Filter = ({
             setLoadingPrograms(false)
             setPrograms(programs)
         } catch (err) {
-            console.log(err)
             setLoadingPrograms(false)
         }
     }
@@ -175,7 +172,6 @@ const Filter = ({
             setLoadingOrganisations(false)
 
         } catch (err) {
-            console.log(err)
             setLoadingOrganisations(false)
         }
     }
@@ -216,15 +212,13 @@ const Filter = ({
         if (currentReport) {
             let parser = new DOMParser()
             const doc = parser.parseFromString(currentReport.html, 'text/html')
-
-            console.log("Initialise ", currentReport)
         }
     }
 
 
     const handleSelectReport = ({ selected }) => {
         setSelectedReport(selected)
-        const currentReport = dataStoreReports?.reports.find(r => r.id === selected)
+        const currentReport = reports.find(r => r.id === selected)
         if (currentReport) {
 
             let parser = new DOMParser()
@@ -270,8 +264,6 @@ const Filter = ({
     const handleCloseOUModal = () => {
         setVisibleOrgUnit(false)
     }
-
-
 
     const OrganisationUnitModal = () => visibleOrgUnit ? <Modal onClose={() => handleCloseOUModal()} large>
         <ModalTitle>
@@ -409,12 +401,16 @@ const Filter = ({
         </>
     )
 
-
     const AggregateDataTypeContent = () => (
         <>
+            <div className='mt-3'>
+                <PeriodFieldType setState={setSelectedPeriodType} state={selectedPeriodType} setSelectedPeriod={setSelectedPeriod} />
+            </div>
 
             <div className='mt-3'>
-                <PeriodField setState={setSelectedPeriod} state={selectedPeriod} />
+                <Field label="Period">
+                    <DatePicker size='large' picker={selectedPeriodType} placeholder='Period' style={{ width: '100%' }} value={selectedPeriod} onChange={period => setSelectedPeriod(period)} />
+                </Field>
             </div>
 
             <div className='mt-4'>
@@ -428,7 +424,7 @@ const Filter = ({
                     primary
                     onClick={handleUpdateInformation}
                     disabled={selectedReport && selectedPeriod && currentOrgUnits.length > 0 ? false : true}
-                    loading={loadingGetDatas}
+                    loading={loadingGetDatas || loadingLegends}
                 >
                     Update report
                 </Button>
@@ -438,7 +434,7 @@ const Filter = ({
     )
 
     const handleSelectDataTypeFromHTML = ({ selected }) => {
-        const currentReport = dataStoreReports?.reports.find(r => r.id === selectedReport)
+        const currentReport = reports.find(r => r.id === selectedReport)
 
         if (selected && currentReport) {
             setSelectedDataTypeFromHTML(selected)
@@ -461,11 +457,11 @@ const Filter = ({
                             selected={selectedReport}
                             onChange={handleSelectReport}
                         >
-                            {isDataStoreReportsCreated && dataStoreReports?.reports?.map(report => (
+                            {isDataStoreReportsCreated && reports?.map(report => (
                                 <SingleSelectOption label={report.name} value={report.id} />
                             ))}
 
-                            {isDataStoreReportsCreated && dataStoreReports.reports?.length === 0 && <SingleSelectOption label="No Report" />}
+                            {isDataStoreReportsCreated && reports?.length === 0 && <SingleSelectOption label="No Report" />}
                         </SingleSelect>
                     </Field>
                 </div>

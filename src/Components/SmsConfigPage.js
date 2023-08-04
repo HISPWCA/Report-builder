@@ -5,6 +5,8 @@ import { v4 as uuid } from 'uuid'
 import { BiEdit } from 'react-icons/bi'
 import { RiDeleteBinLine } from 'react-icons/ri'
 import { Spin } from "antd";
+import { loadDataStore, saveDataToDataStore } from "../utils/fonctions";
+import { NOTIFICATON_CRITICAL, NOTIFICATON_SUCCESS } from "../utils/constants";
 
 const summernoteConfig = {
     height: 200,
@@ -42,12 +44,10 @@ const summernoteConfig = {
 }
 
 const SmsConfigPage = ({
-    dataStoreReports,
-    loadingSendDatas,
-    handleSaveDataToDataStore,
-    setNotification,
-    setLoadingSendDatas,
-    me
+    loadingSmsConfigs,
+    setLoadingSmsConfigs,
+    smsConfigs,
+    setSmsConfigs
 }) => {
     const [currentHtmlTagSelected, setCurrentHtmlTagSelected] = useState(null)
     const [loadingPrograms, setLoadingPrograms] = useState(false)
@@ -64,6 +64,8 @@ const SmsConfigPage = ({
 
     const [selectedAttribute, setSelectedAttribute] = useState(null)
     const [selectedProgram, setSelectedProgram] = useState(null)
+
+    const [loadingProcess, setLoadingProcess] = useState(false)
 
     const initSummernote = () => {
         window.$(document).ready(function () {
@@ -106,20 +108,13 @@ const SmsConfigPage = ({
     }
 
     const handleSaveReport = () => {
-        console.log("Selected program  : ", selectedProgram)
-        console.log("Selected program attribute  : ", selectedAttribute)
-        console.log("curret: ", currentHtmlTagSelected)
-
         if (selectedProgram && selectedAttribute && currentHtmlTagSelected) {
 
             const ID_string = "SMS-".concat(selectedProgram.id).concat("-").concat(selectedAttribute.id)
             const NAME_String = "( ".concat(selectedProgram.name).concat(' - ').concat(selectedAttribute.name).concat(' )')
 
-            // window.$(currentHtmlTagSelected).attr("id", ID_string)
-            // window.$(currentHtmlTagSelected).html(NAME_String)
             currentHtmlTagSelected.setAttribute("id", ID_string)
             currentHtmlTagSelected.innerHTML = NAME_String
-
         }
         setVisibleAddAttributeModal(false)
 
@@ -178,7 +173,7 @@ const SmsConfigPage = ({
 
     const handleSaveTemplate = async () => {
         try {
-            setLoadingSendDatas(true)
+            setLoadingProcess(true)
             const html_code = window.$('#summernote-sms-template')?.summernote('code')
             if (!html_code || html_code.trim() === "")
                 throw new Error("Html must not empty")
@@ -186,34 +181,33 @@ const SmsConfigPage = ({
             if (!templateName || templateName.trim() === "")
                 throw new Error("Template name is required")
 
-            const payload = {
-                ...dataStoreReports,
-                smsConfigs: dataStoreReports.smsConfigs && dataStoreReports.smsConfigs.length > 0 ?
-                    [
-                        ...dataStoreReports.smsConfigs,
-                        {
-                            id: uuid(),
-                            name: templateName,
-                            code: html_code
-                        }
-                    ] :
-                    [
-                        {
-                            id: uuid(),
-                            name: templateName,
-                            code: html_code
-                        }
-                    ]
-            }
+            const payload = smsConfigs && smsConfigs.length > 0 ?
+                [
+                    {
+                        id: uuid(),
+                        name: templateName,
+                        code: html_code
+                    },
+                    ...smsConfigs
+                ] :
+                [
+                    {
+                        id: uuid(),
+                        name: templateName,
+                        code: html_code
+                    }
+                ]
 
-            await handleSaveDataToDataStore(payload)
-            setNotification({ message: "SMS Template is created", visible: true, type: "success" })
-            setLoadingSendDatas(false)
+            await saveDataToDataStore(process.env.REACT_APP_SMS_CONFIG_KEY, payload, setLoadingProcess)
+            loadDataStore(process.env.REACT_APP_SMS_CONFIG_KEY, setLoadingSmsConfigs, setSmsConfigs, [])
+
+            setLoadingProcess(false)
             setVisibleSaveModal(false)
+            setNotif({ message: "SMS Template is created", show: true, type: NOTIFICATON_SUCCESS })
         } catch (err) {
             console.log(err)
-            setNotification({ message: err.message, visible: true, type: "critical" })
-            setLoadingSendDatas(false)
+            setLoadingProcess(false)
+            setNotif({ message: err.message, show: true, type: NOTIFICATON_CRITICAL })
         }
     }
 
@@ -229,7 +223,6 @@ const SmsConfigPage = ({
             SMS Template
         </ModalTitle>
         <ModalContent>
-
             <Field label="SMS Template name">
                 <Input onChange={({ value }) => setTemplateName("".concat(value))} value={templateName} placeholder="Template name " />
             </Field>
@@ -240,7 +233,7 @@ const SmsConfigPage = ({
                 <Button onClick={handleCloseAttributeModal} secondary>
                     close
                 </Button>
-                <Button onClick={handleSaveTemplate} primary disabled={loadingSendDatas ? true : false} loading={loadingSendDatas ? true : false}>
+                <Button onClick={handleSaveTemplate} primary disabled={loadingProcess ? true : false} loading={loadingProcess ? true : false}>
                     Save Report
                 </Button>
             </ButtonStrip>
@@ -273,23 +266,22 @@ const SmsConfigPage = ({
     const handleDeleteTemplate = async (id, index) => {
         try {
             if (id) {
-                setLoadingSendDatas(false)
+                setLoadingProcess(false)
                 setCurrentTemplateIndex(index)
-                const newPayload = {
-                    ...dataStoreReports,
-                    smsConfigs: dataStoreReports.smsConfigs.filter(r => r.id !== id)
-                }
+                const newPayload = smsConfigs.filter(r => r.id !== id)
 
-                await handleSaveDataToDataStore(newPayload)
-                setNotification({ visible: true, message: "Delete success", type: 'success' })
-                setLoadingSendDatas(false)
+                await saveDataToDataStore(process.env.REACT_APP_SMS_CONFIG_KEY, newPayload, setLoadingProcess)
+                loadDataStore(process.env.REACT_APP_SMS_CONFIG_KEY, setLoadingSmsConfigs, setSmsConfigs, [])
+
+                setNotif({ show: true, message: "Delete success", type: NOTIFICATON_SUCCESS })
+                setLoadingProcess(false)
             } else {
                 throw new Error("No report selected ")
             }
 
         } catch (err) {
-            setNotification({ visible: true, message: err.message, type: 'critical' })
-            setLoadingSendDatas(false)
+            setNotif({ show: true, message: err.message, type: NOTIFICATON_CRITICAL })
+            setLoadingProcess(false)
         }
     }
 
@@ -304,37 +296,50 @@ const SmsConfigPage = ({
         <div className="col-md-5 ">
             <div className="ml-3 p-4 my-shadow bg-white border rounded w-full">
                 <div style={{ textDecoration: "underline" }}>Template List</div>
-                <Table>
-                    <TableHead>
-                        <TableRowHead className="bg-light">
-                            <TableCellHead dense>Name</TableCellHead>
-                            <TableCellHead dense>Actions</TableCellHead>
-                        </TableRowHead>
-                    </TableHead>
-                    <TableBody>
-                        {dataStoreReports?.smsConfigs?.length > 0 && dataStoreReports.smsConfigs.map((template, index) => (
-                            <TableRow key={template.id}>
-                                <TableCell dense className="text-text-muted"> {template.name} </TableCell>
-                                <TableCell dense>
-                                    <div className='d-flex align-items-center'>
-                                        <span className='d-flex align-items-center justify-content-center'>
-                                            <BiEdit style={{ color: "#06695C", fontSize: "18px", cursor: "pointer", background: "#eeeeee20", padding: "2px", borderRadius: "5px", border: "1px solid #ccc" }} onClick={() => handleEditReport(template)} />
-                                        </span>
-                                        <span className='ml-2 d-flex align-items-center justify-content-center'>
-                                            {loadingSendDatas && index === currentTemplateIndex && <Spin size='small' className='mr-2' />}
-                                            <RiDeleteBinLine style={{ color: "red", fontSize: "18px", cursor: "pointer", background: "#eeeeee20", padding: "2px", borderRadius: "5px", border: "1px solid #ccc" }} onClick={() => handleDeleteTemplate(template.id, index)} />
-                                        </span>
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                        {dataStoreReports?.smsConfigs?.length === 0 && (
-                            <TableRow>
-                                <TableCell dense colSpan="2" className="text-text-muted"> No template ! </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
+                <div>
+                    <div>
+                        {
+                            loadingSmsConfigs && (
+                                <div className="d-flex align-items-center">
+
+                                </div>
+                            )
+                        }
+                    </div>
+                    <div className="mt-2">
+                        <Table>
+                            <TableHead>
+                                <TableRowHead className="bg-light">
+                                    <TableCellHead dense>Name</TableCellHead>
+                                    <TableCellHead dense>Actions</TableCellHead>
+                                </TableRowHead>
+                            </TableHead>
+                            <TableBody>
+                                {smsConfigs?.length > 0 && smsConfigs.map((template, index) => (
+                                    <TableRow key={template.id}>
+                                        <TableCell dense className="text-text-muted"> {template.name} </TableCell>
+                                        <TableCell dense>
+                                            <div className='d-flex align-items-center'>
+                                                <span className='d-flex align-items-center justify-content-center'>
+                                                    <BiEdit style={{ color: "#06695C", fontSize: "18px", cursor: "pointer", background: "#eeeeee20", padding: "2px", borderRadius: "5px", border: "1px solid #ccc" }} onClick={() => handleEditReport(template)} />
+                                                </span>
+                                                <span className='ml-2 d-flex align-items-center justify-content-center'>
+                                                    {loadingProcess && index === currentTemplateIndex && <Spin size='small' className='mr-2' />}
+                                                    <RiDeleteBinLine style={{ color: "red", fontSize: "18px", cursor: "pointer", background: "#eeeeee20", padding: "2px", borderRadius: "5px", border: "1px solid #ccc" }} onClick={() => handleDeleteTemplate(template.id, index)} />
+                                                </span>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                                {smsConfigs?.length === 0 && (
+                                    <TableRow>
+                                        <TableCell dense colSpan="2" className="text-text-muted"> No template ! </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </div>
             </div>
         </div>
     )
@@ -352,8 +357,8 @@ const SmsConfigPage = ({
     }, [])
 
     return (
-        <div className="px-4"> {console.log("current html element ", currentHtmlTagSelected)}
-            <div className="my-2"> {console.log("load program : ", programs)}
+        <div className="px-4">
+            <div className="my-2">
                 <div className="font-weight-bold" style={{ fontSize: "16px" }}>Sms configurations</div>
             </div>
             <hr />

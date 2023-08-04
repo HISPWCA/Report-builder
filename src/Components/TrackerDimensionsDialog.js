@@ -34,8 +34,6 @@ const DimensionsDialog = ({
             })
         }
 
-        console.log("new option ", new_option_list)
-
         return [...programs.map(program => ({ label: program.name, value: program.id })), ...new_option_list]
     }
 

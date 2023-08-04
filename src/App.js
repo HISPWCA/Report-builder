@@ -1,32 +1,36 @@
 import React, { useState, useEffect } from 'react'
 import DesignsPage from './Components/DesignsPage'
 import ReportsPage from './Components/ReportsPage'
-import { ANALYTICS_ROUTE, APP_NAME, DATA_STORE_ROUTE, ME_ROUTE, TEIS_ROUTE, ORGANISATION_UNIT_GROUP_ROUTE } from './api.routes'
+import { ANALYTICS_ROUTE, ME_ROUTE, TEIS_ROUTE, ORGANISATION_UNIT_GROUP_ROUTE } from './api.routes'
 import { Button, CircularLoader }
     from '@dhis2/ui'
 import Filter from './Components/Filter'
-import { PAGE_DESIGN, PAGE_LEGEND, PAGE_REPORT, PAGE_SMS_CONFIG } from './utils/constants'
-import {
-    AlertBar
-} from '@dhis2/ui'
-import { cleanAggrateDimensionData, getAggregateDimensionsList, getOrgUnitParentFromHtml, injectDataIntoHtml, inject_tei_into_html, updateAndInjectOtherElementPeriod, updateAndInjectSchoolNames } from './utils/fonctions'
-import Scrollbars from 'react-custom-scrollbars-2'
+import { DAY, MONTH, NOTIFICATON_CRITICAL, PAGE_DESIGN, PAGE_LEGEND, PAGE_REPORT, PAGE_SMS_CONFIG, YEAR, YEARLY } from './utils/constants'
+
+import { cleanAggrateDimensionData, getAggregateDimensionsList, getOrgUnitParentFromHtml, injectDataIntoHtml, inject_tei_into_html, loadDataStore, updateAndInjectOtherElementPeriod, updateAndInjectSchoolNames } from './utils/fonctions'
 import LegendPage from './Components/LegendPage'
 import { NextUIProvider, Modal, Table } from '@nextui-org/react';
 import SmsConfigPage from './Components/SmsConfigPage'
-import 'antd/dist/antd.css'
+import MyNotification from './Components/MyNotification'
+import { TbReportSearch } from 'react-icons/tb'
+import { LuClipboardEdit } from 'react-icons/lu'
+import { GrDocumentConfig } from 'react-icons/gr'
+import { BiMessageDetail } from 'react-icons/bi'
+// import 'antd/dist/antd.css'
+import 'antd/dist/reset.css'
 import './App.css'
+import Period from './Components/Period'
+import dayjs from 'dayjs'
 
 
 
 const App = () => {
-    const [notification, setNotification] = useState({ visible: false, message: "", type: "success" })
-    const [dataStoreReports, setDataStoreReports] = useState([])
+    const [notif, setNotif] = useState({ show: false, message: null, type: null })
+
     const [isDataStoreReportsCreated, setDataStoreReportsCreated] = useState(false)
     const [renderPage, setRenderPage] = useState(PAGE_REPORT)
     const [selectedReport, setSelectedReport] = useState(null)
     const [dataType, setDataType] = useState(null)
-
     const [dataValues, setDataValues] = useState([])
     const [orgUnits, setOrgUnits] = useState([])
     const [organisationUnitGroups, setOrganisationUnitGroups] = useState([])
@@ -34,7 +38,10 @@ const App = () => {
     const [maxLevel, setMaxLevel] = useState(null)
     const [minLevel, setMinLevel] = useState(null)
     const [meOrgUnitId, setMeOrgUnitId] = useState(null)
-
+    const [reports, setReports] = useState([])
+    const [legends, setLegends] = useState([])
+    const [images, setImages] = useState([])
+    const [smsConfigs, setSmsConfigs] = useState([])
     const [expandedKeys, setExpandedKeys] = useState([])
     const [currentOrgUnits, setCurrentOrgUnits] = useState([])
     const [selectedOrgUnits, setSelectedOrgUnits] = useState([])
@@ -49,15 +56,20 @@ const App = () => {
     const [loadingGetDatas, setLoadingGetDatas] = useState(false)
     const [loadingDataStoreReports, setLoadingDataStoreReports] = useState([])
     const [loadingSendDatas, setLoadingSendDatas] = useState(false)
+    const [loadingDataStoreInitialization, setLoadingDataStoreInitialization] = useState(false)
+    const [loadingSmsConfigs, setLoadingSmsConfigs] = useState(false)
+    const [loadingImages, setLoadingImages] = useState(false)
+    const [loadingLegends, setLoadingLegends] = useState(false)
+    const [loadingReports, setLoadingReports] = useState(false)
 
     const [visibleListTei, setVisibleListTei] = useState(false)
     const [me, setMe] = useState(null)
 
-    // element get from html 
     const [dataTypesFromHTML, setDataTypesFromHTML] = useState([])
     const [selectedDataTypeFromHTML, setSelectedDataTypeFromHTML] = useState(null)
     const [programTrackersFromHTML, setProgramTrackersFromHTML] = useState([])
     const [dataElementsFromHTML, setDataElementsFromHTML] = useState([])
+
     const [selectedProgramTrackerFromHTML, setSelectedProgramTrackerFromHTML] = useState(null)
     const [searchByAttribute, setSearchByAttribute] = useState(false)
 
@@ -65,53 +77,57 @@ const App = () => {
     const [teis, setTeis] = useState([])
     const [selectedTEI, setSelectedTEI] = useState(null)
 
+    const [selectedPeriodType, setSelectedPeriodType] = useState(YEAR)
+    const [visiblePeriodComponent, setVisiblePeriodComponent] = useState(false)
 
-    useEffect(() => {
-        getDataStoreReports()
-        loadMe()
-        loadOrganisationUnitGroups()
-    }, [])
+    const [selectedPeriods, setSelectedPeriods] = useState([])
 
-    const handleSaveDataToDataStore = async payload => {
+
+    const initDataStore = async () => {
         try {
-            setLoadingSendDatas(true)
+            setLoadingDataStoreInitialization(true)
+            loadDataStore(process.env.REACT_APP_LEGENDS_KEY, setLoadingLegends, setLegends, [])
+            loadDataStore(process.env.REACT_APP_REPORTS_KEY, setLoadingReports, setReports, [])
+            loadDataStore(process.env.REACT_APP_IMAGES_KEY, setLoadingImages, setImages, [])
+            loadDataStore(process.env.REACT_APP_SMS_CONFIG_KEY, setLoadingSmsConfigs, setSmsConfigs, [])
 
-            const request = await fetch(DATA_STORE_ROUTE.concat('/').concat(APP_NAME).concat('/reports'), {
-                method: "put",
-                headers: {
-                    "content-type": "application/json"
-                },
-                body: JSON.stringify(payload)
-            })
+            await loadMe()
+            loadOrganisationUnitGroups()
 
-            const response = await request.json()
-            if (response.status === "ERROR")
-                throw response
-
-            setLoadingSendDatas(false)
-            setNotification({ visible: true, message: "Update success", type: "success" })
-            await getDataStoreReports()
+            setLoadingDataStoreInitialization(false)
+            setDataStoreReportsCreated(true)
         } catch (err) {
-            setLoadingSendDatas(false)
-            setNotification({ visible: true, message: err.message, type: "critical" })
+            setNotif({ show: true, message: err?.response?.data?.message || err.message, type: NOTIFICATON_CRITICAL })
+            setDataStoreReportsCreated(false)
+            setLoadingDataStoreInitialization(false)
         }
 
     }
 
+    const formatPeriodForAnalytic = (period, periodType) => {
+        if (periodType === DAY)
+            return dayjs(period).format('YYYYMMDD')
+        if (periodType === YEAR)
+            return dayjs(period).format('YYYY')
+        if (periodType === MONTH)
+            return dayjs(period).format('YYYYMM')
+    }
 
     const handleUpdateInformation = async () => {
         try {
-
             setLoadingGetDatas(true)
+            setNotif({ show: false, message: null, type: null })
             const corresponding_parents = getOrgUnitParentFromHtml(
                 currentOrgUnits[0].id,
                 orgUnits,
                 orgUnitLevels
             )
 
-            const dimensionList = getAggregateDimensionsList(dataStoreReports.reports.find(dataS => dataS.id === selectedReport))
+            const dimensionList = getAggregateDimensionsList(reports.find(dataS => dataS.id === selectedReport))
 
-            cleanAggrateDimensionData(dataStoreReports.reports.find(dataS => dataS.id === selectedReport), dataStoreReports.legends, dimensionList)
+            cleanAggrateDimensionData(reports.find(dataS => dataS.id === selectedReport), legends, dimensionList, selectedPeriod, selectedPeriodType)
+
+            console.log("selectedPeriod: ", selectedPeriod)
 
             for (let dim of dimensionList) {
                 try {
@@ -121,8 +137,7 @@ const App = () => {
                         .concat("&dimension=dx:")
                         .concat(dim)
                         .concat("&dimension=pe:")
-                        .concat(selectedPeriod)
-                    // .concat("&showHierarchy=false&hierarchyMeta=false&includeMetadataDetails=true&includeNumDen=true&skipRounding=false&completedOnly=false&paging=false")
+                        .concat(formatPeriodForAnalytic(selectedPeriod, selectedPeriodType))
 
                     const request = await fetch(route)
                     const response = await request.json()
@@ -134,9 +149,10 @@ const App = () => {
                     setDataValues(response.dataValues)
 
                     // resetAlltdValue()
-                    injectDataIntoHtml(response.dataValues, dataStoreReports.reports.find(dataS => dataS.id === selectedReport) || "", dataStoreReports.legends, orgUnits, orgUnitLevels, currentOrgUnits[0].id)
+                    injectDataIntoHtml(response.dataValues, reports.find(dataS => dataS.id === selectedReport) || "", legends, orgUnits, orgUnitLevels, currentOrgUnits[0].id, selectedPeriod, selectedPeriodType, setNotif)
 
                 } catch (err) {
+                    console.log(err)
                 }
             }
 
@@ -144,70 +160,23 @@ const App = () => {
             handleUpdateOtherElement()
 
         } catch (err) {
+            console.log(err)
             setLoadingGetDatas(false)
         }
     }
 
     const handleUpdateOtherElement = () => {
         try {
-            const report = dataStoreReports.reports.find(dataS => dataS.id === selectedReport)
+            const report = reports.find(dataS => dataS.id === selectedReport)
             if (report) {
-                console.log(selectedPeriod)
                 updateAndInjectOtherElementPeriod(report, selectedPeriod)
                 updateAndInjectSchoolNames(report, currentOrgUnits[0].id, orgUnits, orgUnitLevels)
             }
         } catch (err) {
-            console.log(err)
         }
     }
 
-
-    const createDataStore = () => {
-        fetch(DATA_STORE_ROUTE.concat('/').concat(APP_NAME).concat('/reports'), {
-            method: "post",
-            headers: {
-                "content-type": "application/json"
-            },
-
-            body: JSON.stringify({
-                reports: [],
-                images: [],
-                legends: []
-            })
-        })
-            .then(response => response.json())
-            .then(response => {
-                if (response.status === "ERROR")
-                    throw response
-
-                getDataStoreReports()
-            })
-            .catch(err => {
-                setLoadingDataStoreReports(false)
-                setDataStoreReportsCreated(false)
-                setLoadingDataStoreReports(false)
-            })
-    }
-
-    const getDataStoreReports = async _ => {
-        try {
-            setLoadingDataStoreReports(true)
-            const request = await fetch(DATA_STORE_ROUTE.concat('/').concat(APP_NAME).concat('/reports'))
-
-            const response = await request.json()
-
-            if (response.status === "ERROR")
-                throw response
-
-            setDataStoreReports(response)
-            setDataStoreReportsCreated(true)
-            setLoadingDataStoreReports(false)
-        } catch (error) {
-            createDataStore()
-        }
-    }
-
-    const loadMe = _ => {
+    const loadMe = async _ => {
         fetch(ME_ROUTE)
             .then(response => response.json())
             .then(response => {
@@ -217,11 +186,8 @@ const App = () => {
                 setMe(response)
             })
             .catch(err => {
-                console.log(err)
             })
     }
-
-
 
     const loadOrganisationUnitGroups = async _ => {
         try {
@@ -237,11 +203,9 @@ const App = () => {
             setLoadingOrganisationUnitGroups(false)
         } catch (error) {
             setLoadingOrganisationUnitGroups(false)
-            setNotification({ message: error.message, type: 'error', visible: true })
+            setNotif({ message: error.message, type: NOTIFICATON_CRITICAL, show: true })
         }
     }
-
-
 
     const handleDesignPage = () => {
         setRenderPage(PAGE_DESIGN)
@@ -260,7 +224,7 @@ const App = () => {
     }
 
     const generateTeiReport = (tei) => {
-        inject_tei_into_html(dataStoreReports?.reports?.find(report => report.id === selectedReport), tei, selectedProgramTrackerFromHTML)
+        inject_tei_into_html(reports?.find(report => report.id === selectedReport), tei, selectedProgramTrackerFromHTML, setNotif, legends)
         setVisibleListTei(false)
         setSelectedTEI(tei)
     }
@@ -309,25 +273,35 @@ const App = () => {
         }
     }
 
-    const RenderContent = () => me && <div className='d-flex' style={{ overflow: "hidden", backgroundColor: "#f3f3f3" }}>
-        {/* <div className='px-3  py-2 border-right' style={{ width: "250px", overflow: "hidden", background: "#F8F9FA" }}> */}
-        <div className='border-right' style={{ width: "350px", overflow: "hidden" }}>
-            <Scrollbars style={{ height: "95vh", width: "100%" }}>
-                <div className=' py-2 px-3 ' style={{ margin: "0px auto" }}>
-
-                    {me.authorities.includes("ALL") && (
-                        <>
-                            <div onClick={() => handleReportPage()} className={'my-menu'.concat(renderPage === PAGE_REPORT ? ' current' : '')}>Reports</div>
-                            <div onClick={() => handleDesignPage()} className={'my-menu'.concat(renderPage === PAGE_DESIGN ? ' current' : '')}>Design</div>
-                            <div onClick={() => handleLegendPage()} className={'my-menu'.concat(renderPage === PAGE_LEGEND ? ' current' : '')}>Legend</div>
-                            <div onClick={() => handleSmsConfigPage()} className={'my-menu'.concat(renderPage === PAGE_SMS_CONFIG ? ' current' : '')}>SMS Config</div>
-                            <hr className='text-black' />
-                        </>
-                    )}
+    const RenderContent = () => me && (
+        <div className='row' style={{ width: '100%', minHeight: '95vh' }}>
+            <div className='col-md-2' style={{ borderRight: '1px solid #ccc' }}>
+                <div className='py-2 px-3 ' style={{ position: 'sticky', top: '0px' }}>
+                    {
+                        me.authorities.includes("ALL") && (
+                            <>
+                                <div onClick={() => handleReportPage()} style={{ display: 'flex', alignItems: 'center' }} className={'my-menu'.concat(renderPage === PAGE_REPORT ? ' current' : '')}>
+                                    <span><TbReportSearch style={{ fontSize: '20px' }} /></span>
+                                    <span style={{ marginLeft: '10px' }}>Reports</span>
+                                </div>
+                                <div onClick={() => handleDesignPage()} style={{ display: 'flex', alignItems: 'center' }} className={'my-menu'.concat(renderPage === PAGE_DESIGN ? ' current' : '')}>
+                                    <span><LuClipboardEdit style={{ fontSize: '20px' }} /></span>
+                                    <span style={{ marginLeft: '10px' }}>Design</span>
+                                </div>
+                                <div onClick={() => handleLegendPage()} style={{ display: 'flex', alignItems: 'center' }} className={'my-menu'.concat(renderPage === PAGE_LEGEND ? ' current' : '')}>
+                                    <span><GrDocumentConfig style={{ fontSize: '20px' }} /></span>
+                                    <span style={{ marginLeft: '10px' }}>Legend</span>
+                                </div>
+                                <div onClick={() => handleSmsConfigPage()} style={{ display: 'flex', alignItems: 'center' }} className={'my-menu'.concat(renderPage === PAGE_SMS_CONFIG ? ' current' : '')}>
+                                    <span><BiMessageDetail style={{ fontSize: '20px' }} /></span>
+                                    <span style={{ marginLeft: '10px' }}> SMS Config</span>
+                                </div>
+                                <hr className='text-black' />
+                            </>
+                        )}
 
                     <Filter
                         currentOrgUnits={currentOrgUnits}
-                        dataStoreReports={dataStoreReports}
                         dataType={dataType}
                         expandedKeys={expandedKeys}
                         handleUpdateInformation={handleUpdateInformation}
@@ -357,7 +331,7 @@ const App = () => {
                         selectedProgram={selectedProgram}
                         me={me}
                         setSelectedTEI={setSelectedTEI}
-
+                        loadingLegends={loadingLegends}
                         searchProperties={searchProperties}
                         setSearchProperties={setSearchProperties}
                         dataTypesFromHTML={dataTypesFromHTML}
@@ -374,82 +348,96 @@ const App = () => {
                         loadingQueryTeiList={loadingQueryTeiList}
                         dataElementsFromHTML={dataElementsFromHTML}
                         setDataElementsFromHTML={setDataElementsFromHTML}
+                        reports={reports}
+                        setVisiblePeriodComponent={setVisiblePeriodComponent}
+                        setSelectedPeriodType={setSelectedPeriodType}
+                        selectedPeriodType={selectedPeriodType}
+                        visiblePeriodComponent={visiblePeriodComponent}
+                        setSelectedPeriods={setSelectedPeriods}
                     />
                 </div>
-            </Scrollbars>
-        </div>
-        <div style={{ width: "100%", overflow: "auto", height: "95vh" }}>
-            <div className='d-flex flex-column justify-content-center py-2 px-3'>
-                {
-                    renderPage === PAGE_REPORT && (
-                        <ReportsPage
-                            dataStoreReports={dataStoreReports}
-                            selectedReport={dataStoreReports?.reports?.find(dataS => dataS.id === selectedReport)}
-                            dataValues={dataValues}
-                            searchProperties={searchProperties}
-                            minLevel={minLevel}
-                            setSearchProperties={setSearchProperties}
-                            generateTeiReport={generateTeiReport}
-                            setVisibleListTei={setVisibleListTei}
-                            visibleListTei={visibleListTei}
-                            setLoadingSendDatas={setLoadingSendDatas}
-                            loadingSendDatas={loadingSendDatas}
-                            setNotification={setNotification}
-                            me={me}
-                            searchByAttribute={searchByAttribute}
-                            queryTeiList={queryTeiList}
-                            selectedTEI={selectedTEI}
-                            dataTypesFromHTML={dataTypesFromHTML}
-                            currentOrgUnits={currentOrgUnits}
-                        />
-                    )
-                }
-                {
-                    renderPage === PAGE_DESIGN && me.authorities.includes('ALL') && (
-                        <DesignsPage
-                            dataStoreReports={dataStoreReports}
-                            setNotification={setNotification}
-                            handleSaveDataToDataStore={handleSaveDataToDataStore}
-                            loadingSendDatas={loadingSendDatas}
-                            organisationUnitLevels={orgUnitLevels}
-                            handleReportPage={handleReportPage}
-                            setLoadingSendDatas={setLoadingSendDatas}
-                            me={me}
-                            organisationUnitGroups={organisationUnitGroups}
-                            loadingDataStoreReports={loadingDataStoreReports}
-                        />
-                    )
-                }
+            </div>
+            <div className='col-md-10'>
+                <div className='d-flex flex-column justify-content-center'>
+                    {
+                        renderPage === PAGE_REPORT && (
+                            <ReportsPage
+                                selectedReport={reports?.find(dataS => dataS.id === selectedReport)}
+                                dataValues={dataValues}
+                                searchProperties={searchProperties}
+                                minLevel={minLevel}
+                                setSearchProperties={setSearchProperties}
+                                generateTeiReport={generateTeiReport}
+                                setVisibleListTei={setVisibleListTei}
+                                visibleListTei={visibleListTei}
+                                setLoadingSendDatas={setLoadingSendDatas}
+                                loadingSendDatas={loadingSendDatas}
+                                me={me}
+                                searchByAttribute={searchByAttribute}
+                                queryTeiList={queryTeiList}
+                                selectedTEI={selectedTEI}
+                                dataTypesFromHTML={dataTypesFromHTML}
+                                currentOrgUnits={currentOrgUnits}
+                                setNotif={setNotif}
+                                smsConfigs={smsConfigs}
+                            />
+                        )
+                    }
+                    {
+                        renderPage === PAGE_DESIGN && me.authorities.includes('ALL') && (
+                            <DesignsPage
+                                loadingSendDatas={loadingSendDatas}
+                                organisationUnitLevels={orgUnitLevels}
+                                handleReportPage={handleReportPage}
+                                setLoadingSendDatas={setLoadingSendDatas}
+                                me={me}
+                                organisationUnitGroups={organisationUnitGroups}
+                                loadingDataStoreReports={loadingDataStoreReports}
+                                setNotif={setNotif}
+                                reports={reports}
+                                legends={legends}
+                                images={images}
+                                setLoadingReports={setLoadingReports}
+                                setReports={setReports}
+                                loadingLegends={loadingLegends}
+                                loadingReports={loadingReports}
+                            />
+                        )
+                    }
 
-                {
-                    renderPage === PAGE_LEGEND && me.authorities.includes('ALL') && (
-                        <LegendPage
-                            dataStoreReports={dataStoreReports}
-                            loadingSendDatas={loadingSendDatas}
-                            handleSaveDataToDataStore={handleSaveDataToDataStore}
-                            setNotification={setNotification}
-                            setLoadingSendDatas={setLoadingSendDatas}
-                            me={me}
-                            loadingDataStoreReports={loadingDataStoreReports}
-                        />
-                    )
-                }
+                    {
+                        renderPage === PAGE_LEGEND && me.authorities.includes('ALL') && (
+                            <LegendPage
+                                setLoadingSendDatas={setLoadingSendDatas}
+                                me={me}
+                                setNotif={setNotif}
+                                legends={legends}
+                                setLegends={setLegends}
+                                loadingLegends={loadingLegends}
+                                setLoadingLegends={setLoadingLegends}
+                            />
+                        )
+                    }
 
-                {
-                    renderPage === PAGE_SMS_CONFIG && me.authorities.includes('ALL') && (
-                        <SmsConfigPage
-                            dataStoreReports={dataStoreReports}
-                            loadingSendDatas={loadingSendDatas}
-                            handleSaveDataToDataStore={handleSaveDataToDataStore}
-                            setNotification={setNotification}
-                            setLoadingSendDatas={setLoadingSendDatas}
-                            me={me}
-                        />
-                    )
-                }
+                    {
+                        renderPage === PAGE_SMS_CONFIG && me.authorities.includes('ALL') && (
+                            <SmsConfigPage
+                                setLoadingSendDatas={setLoadingSendDatas}
+                                me={me}
+                                setNotif={setNotif}
+                                reports={reports}
+                                legends={legends}
+                                loadingSmsConfigs={loadingSmsConfigs}
+                                setLoadingSmsConfigs={setLoadingSmsConfigs}
+                                smsConfigs={smsConfigs}
+                                setSmsConfigs={setSmsConfigs}
+                            />
+                        )
+                    }
+                </div>
             </div>
         </div>
-    </div>
+    )
 
 
     const RenderListTeiModal = () => (
@@ -516,34 +504,24 @@ const App = () => {
     )
 
 
-    const Notification = () => notification && notification.visible ? (
-        <div style={{ zIndex: 2000, position: "fixed", bottom: 5, right: 10 }}>
-            <AlertBar
-                duration={3000}
-                success={notification.type === "success" ? true : false}
-                critical={notification.type === "critical" ? true : false}
-                warning={notification.type === "warning" ? true : false}
-                onHidden={() => setNotification({ ...notification, visible: false })}
-            >
-                {notification.message}
-            </AlertBar>
-        </div>
-    ) : <></>
+    useEffect(() => {
+        initDataStore()
+    }, [])
 
     return (
         <NextUIProvider>
-            <div style={{ overflow: "hidden", maxHeight: "100vh" }}>
+            <div style={{ minHeight: '95vh', backgroundColor: "#f3f3f3" }}>
                 {
-                    loadingDataStoreReports && (
+                    loadingDataStoreInitialization && (
                         <div className='d-flex align-items-center'>
-                            <div> <CircularLoader /> </div>
-                            <div className='ml-3'> Loading configurations</div>
+                            <div> <CircularLoader small /> </div>
+                            <div className='ml-3'> Loading configurations...</div>
                         </div>
                     )
                 }
                 {isDataStoreReportsCreated && me && RenderContent()}
                 {RenderListTeiModal()}
-                <Notification />
+                <MyNotification notification={notif} setNotification={setNotif} />
             </div>
         </NextUIProvider>
 
