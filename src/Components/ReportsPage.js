@@ -30,9 +30,9 @@ const ReportsPage = ({
 
 }) => {
 
+
     const [loadingTeiProcess, setLoadingTeiProcess] = useState(false)
     const [loadingSendSMS, setLoadingSendSMS] = useState(false)
-
 
     const [visibleSendSMSModal, setVisibleSendSMSModal] = useState(false)
     const [selectedTemplate, setSelectedTemplate] = useState(null)
@@ -192,7 +192,7 @@ const ReportsPage = ({
 
 
     useEffect(() => {
-        if (selectedReport) {
+        if (selectedReport ) {
 
             const aggregateElement = document.body.querySelectorAll("[data-type=" + AGGREGATE.value + "]")
             const trackerElements = document.body.querySelectorAll("[data-type=" + TRACKER.value + "]")
@@ -222,7 +222,7 @@ const ReportsPage = ({
             }
 
         }
-    }, [selectedReport])
+    }, [selectedReport ])
 
 
     return (
@@ -234,7 +234,7 @@ const ReportsPage = ({
                 <div style={{ fontSize: "24px" }} className='font-weight-bold'>Report Builder</div>
             </div>
             <div style={{ padding: '10px' }}>
-                {selectedReport && searchProperties && searchByAttribute && (
+                {selectedReport  && searchProperties && searchByAttribute && (
                     <div className='d-flex align-items-center justify-content-center mt-2'>
                         <div>Search by properties : </div>
                         {searchProperties.map((p, index) => (
@@ -246,16 +246,16 @@ const ReportsPage = ({
                 }
 
                 {
-                    selectedReport && <div className='mt-2 d-flex justify-content-center align-items-center'>
+                    selectedReport  && <div className='mt-2 d-flex justify-content-center align-items-center'>
                         <Button primary onClick={printReportAsPDF}>Print report</Button>
                         {selectedTEI && <Button className="ml-2" loading={loadingSendSMS} onClick={() => setVisibleSendSMSModal(true)}>Send SMS</Button>}
                     </div>
                 }
 
                 {
-                    selectedReport ? (
+                    selectedReport  ? (
                         <div style={{ margin: '0px auto' }}>
-                            <div className='mt-1' id="my-table-container" style={{ fontSize: "12px", maxWidth: "900px", margin: "0px auto" }} dangerouslySetInnerHTML={{ __html: selectedReport && selectedReport.html || "" }} />
+                            <div className='mt-1' id="my-table-container" style={{ fontSize: "12px", maxWidth: "900px", margin: "0px auto" }} dangerouslySetInnerHTML={{ __html: selectedReport.html || "" }} />
                         </div>
                     ) : (
                         <div className='mt-2'>

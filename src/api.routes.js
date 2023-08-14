@@ -1,7 +1,6 @@
 const FULL_ROUTE = window.location.href
 
 export const APP_NAME = "report-builder"
-// export const APP_NAME = "ibrahim-report-builder"
 export const API_BASE_ROUTE = FULL_ROUTE.substring(0, FULL_ROUTE.indexOf('/apps/'.concat(APP_NAME).concat('/')))
 export const SERVER_URL = FULL_ROUTE.substring(0, FULL_ROUTE.indexOf('/api/apps/'.concat(APP_NAME)))
 export const ORGANISATION_UNITS_ROUTE = API_BASE_ROUTE.concat('/organisationUnits.json?paging=false&fields=id,name,displayName,parent,level')
@@ -22,4 +21,5 @@ export const ANALYTICS_ROUTE = API_BASE_ROUTE.concat("/analytics/dataValueSet.js
 export const TEIS_ROUTE = API_BASE_ROUTE.concat('/trackedEntityInstances.json')
 export const SMS_ROUTE_API = API_BASE_ROUTE.concat('/sms/outbound')
 export const TRACKER_ENTITY_INSTANCES_ROUTE = API_BASE_ROUTE.concat('/trackedEntityInstances')
+export const ONE_ORG_UNIT_GROUP_ROUTE = API_BASE_ROUTE.concat('/organisationUnitGroups')
 

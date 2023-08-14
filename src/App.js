@@ -5,9 +5,9 @@ import { ANALYTICS_ROUTE, ME_ROUTE, TEIS_ROUTE, ORGANISATION_UNIT_GROUP_ROUTE } 
 import { Button, CircularLoader }
     from '@dhis2/ui'
 import Filter from './Components/Filter'
-import { DAY, MONTH, NOTIFICATON_CRITICAL, PAGE_DESIGN, PAGE_LEGEND, PAGE_REPORT, PAGE_SMS_CONFIG, YEAR, YEARLY } from './utils/constants'
+import { NOTIFICATON_CRITICAL, PAGE_DESIGN, PAGE_LEGEND, PAGE_REPORT, PAGE_SMS_CONFIG, YEAR } from './utils/constants'
 
-import { cleanAggrateDimensionData, getAggregateDimensionsList, getOrgUnitParentFromHtml, injectDataIntoHtml, inject_tei_into_html, loadDataStore, updateAndInjectOtherElementPeriod, updateAndInjectSchoolNames } from './utils/fonctions'
+import { cleanAggrateDimensionData, formatPeriodForAnalytic, getAggregateDimensionsList, getOrgUnitParentFromHtml, injectDataIntoHtml, inject_tei_into_html, loadDataStore, updateAndInjectOtherElementPeriod, updateAndInjectSchoolNames } from './utils/fonctions'
 import LegendPage from './Components/LegendPage'
 import { NextUIProvider, Modal, Table } from '@nextui-org/react';
 import SmsConfigPage from './Components/SmsConfigPage'
@@ -19,10 +19,6 @@ import { BiMessageDetail } from 'react-icons/bi'
 // import 'antd/dist/antd.css'
 import 'antd/dist/reset.css'
 import './App.css'
-import Period from './Components/Period'
-import dayjs from 'dayjs'
-
-
 
 const App = () => {
     const [notif, setNotif] = useState({ show: false, message: null, type: null })
@@ -30,17 +26,18 @@ const App = () => {
     const [isDataStoreReportsCreated, setDataStoreReportsCreated] = useState(false)
     const [renderPage, setRenderPage] = useState(PAGE_REPORT)
     const [selectedReport, setSelectedReport] = useState(null)
+    const [selectedReportContent, setSelectedReportContent] = useState(null)
     const [dataType, setDataType] = useState(null)
     const [dataValues, setDataValues] = useState([])
     const [orgUnits, setOrgUnits] = useState([])
     const [organisationUnitGroups, setOrganisationUnitGroups] = useState([])
     const [orgUnitLevels, setOrgUnitLevels] = useState([])
-    const [maxLevel, setMaxLevel] = useState(null)
+    const [_, setMaxLevel] = useState(null)
     const [minLevel, setMinLevel] = useState(null)
     const [meOrgUnitId, setMeOrgUnitId] = useState(null)
     const [reports, setReports] = useState([])
     const [legends, setLegends] = useState([])
-    const [images, setImages] = useState([])
+    const [legendContents, setLegendContents] = useState([])
     const [smsConfigs, setSmsConfigs] = useState([])
     const [expandedKeys, setExpandedKeys] = useState([])
     const [currentOrgUnits, setCurrentOrgUnits] = useState([])
@@ -58,9 +55,9 @@ const App = () => {
     const [loadingSendDatas, setLoadingSendDatas] = useState(false)
     const [loadingDataStoreInitialization, setLoadingDataStoreInitialization] = useState(false)
     const [loadingSmsConfigs, setLoadingSmsConfigs] = useState(false)
-    const [loadingImages, setLoadingImages] = useState(false)
-    const [loadingLegends, setLoadingLegends] = useState(false)
     const [loadingReports, setLoadingReports] = useState(false)
+    const [loadingLegends, setLoadingLegends] = useState(false)
+    const [loadingLegendContents, setLoadingLegendContents] = useState(false)
 
     const [visibleListTei, setVisibleListTei] = useState(false)
     const [me, setMe] = useState(null)
@@ -82,13 +79,11 @@ const App = () => {
 
     const [selectedPeriods, setSelectedPeriods] = useState([])
 
-
     const initDataStore = async () => {
         try {
             setLoadingDataStoreInitialization(true)
-            loadDataStore(process.env.REACT_APP_LEGENDS_KEY, setLoadingLegends, setLegends, [])
+            const legs = await loadDataStore(process.env.REACT_APP_LEGENDS_KEY, setLoadingLegends, setLegends, [])
             loadDataStore(process.env.REACT_APP_REPORTS_KEY, setLoadingReports, setReports, [])
-            loadDataStore(process.env.REACT_APP_IMAGES_KEY, setLoadingImages, setImages, [])
             loadDataStore(process.env.REACT_APP_SMS_CONFIG_KEY, setLoadingSmsConfigs, setSmsConfigs, [])
 
             await loadMe()
@@ -96,22 +91,36 @@ const App = () => {
 
             setLoadingDataStoreInitialization(false)
             setDataStoreReportsCreated(true)
+            loadLegendContents(legs)
         } catch (err) {
             setNotif({ show: true, message: err?.response?.data?.message || err.message, type: NOTIFICATON_CRITICAL })
             setDataStoreReportsCreated(false)
             setLoadingDataStoreInitialization(false)
         }
-
     }
 
-    const formatPeriodForAnalytic = (period, periodType) => {
-        if (periodType === DAY)
-            return dayjs(period).format('YYYYMMDD')
-        if (periodType === YEAR)
-            return dayjs(period).format('YYYY')
-        if (periodType === MONTH)
-            return dayjs(period).format('YYYYMM')
+    const loadLegendContents = async (legendList) => {
+        try {
+            setLoadingLegendContents(true)
+            let count = 1
+            let list = []
+            legendList.forEach(async leg => {
+                const content = await loadDataStore(`LEGEND_${leg.id}`, null, null, {})
+
+                count = count + 1
+                list = [...list, content]
+                if (count === legendList.length) {
+                    setLegendContents(list)
+                    setLoadingLegendContents(false)
+                }
+            })
+            setLoadingLegendContents(false)
+        } catch (err) {
+            setLoadingLegendContents(false)
+            throw err
+        }
     }
+
 
     const handleUpdateInformation = async () => {
         try {
@@ -123,42 +132,37 @@ const App = () => {
                 orgUnitLevels
             )
 
-            const dimensionList = getAggregateDimensionsList(reports.find(dataS => dataS.id === selectedReport))
+            const dimensionList = getAggregateDimensionsList(selectedReportContent)
+            cleanAggrateDimensionData(selectedReportContent, dimensionList, selectedPeriod, selectedPeriodType, currentOrgUnits[0]?.id, orgUnits, orgUnitLevels, legendContents, organisationUnitGroups)
 
-            cleanAggrateDimensionData(reports.find(dataS => dataS.id === selectedReport), legends, dimensionList, selectedPeriod, selectedPeriodType)
+            if (dimensionList.length > 0) {
+                for (let dim of dimensionList) {
+                    try {
+                        const route = ANALYTICS_ROUTE
+                            .concat("?dimension=ou:")
+                            .concat(corresponding_parents?.join(';'))
+                            .concat("&dimension=dx:")
+                            .concat(dim)
+                            .concat("&dimension=pe:")
+                            .concat(formatPeriodForAnalytic(selectedPeriod, selectedPeriodType))
 
-            console.log("selectedPeriod: ", selectedPeriod)
+                        const request = await fetch(route)
+                        const response = await request.json()
 
-            for (let dim of dimensionList) {
-                try {
-                    const route = ANALYTICS_ROUTE
-                        .concat("?dimension=ou:")
-                        .concat(corresponding_parents?.join(';'))
-                        .concat("&dimension=dx:")
-                        .concat(dim)
-                        .concat("&dimension=pe:")
-                        .concat(formatPeriodForAnalytic(selectedPeriod, selectedPeriodType))
-
-                    const request = await fetch(route)
-                    const response = await request.json()
-
-                    if (response.status === "ERROR")
-                        throw response
+                        if (response.status === "ERROR")
+                            throw response
 
 
-                    setDataValues(response.dataValues)
+                        setDataValues(response.dataValues)
+                        injectDataIntoHtml(response.dataValues, selectedReportContent, orgUnits, orgUnitLevels, currentOrgUnits[0].id, selectedPeriod, selectedPeriodType, setNotif, legendContents)
 
-                    // resetAlltdValue()
-                    injectDataIntoHtml(response.dataValues, reports.find(dataS => dataS.id === selectedReport) || "", legends, orgUnits, orgUnitLevels, currentOrgUnits[0].id, selectedPeriod, selectedPeriodType, setNotif)
-
-                } catch (err) {
-                    console.log(err)
+                    } catch (err) {
+                    }
                 }
             }
 
-            setLoadingGetDatas(false)
             handleUpdateOtherElement()
-
+            setLoadingGetDatas(false)
         } catch (err) {
             console.log(err)
             setLoadingGetDatas(false)
@@ -167,10 +171,9 @@ const App = () => {
 
     const handleUpdateOtherElement = () => {
         try {
-            const report = reports.find(dataS => dataS.id === selectedReport)
-            if (report) {
-                updateAndInjectOtherElementPeriod(report, selectedPeriod)
-                updateAndInjectSchoolNames(report, currentOrgUnits[0].id, orgUnits, orgUnitLevels)
+            if (selectedReportContent) {
+                updateAndInjectOtherElementPeriod(selectedReportContent, selectedPeriod, selectedPeriodType)
+                updateAndInjectSchoolNames(selectedReportContent, currentOrgUnits[0].id, orgUnits, orgUnitLevels)
             }
         } catch (err) {
         }
@@ -189,10 +192,11 @@ const App = () => {
             })
     }
 
+
     const loadOrganisationUnitGroups = async _ => {
         try {
             setLoadingOrganisationUnitGroups(true)
-            const request = await fetch(ORGANISATION_UNIT_GROUP_ROUTE.concat('&fields=id,name,displayName'))
+            const request = await fetch(ORGANISATION_UNIT_GROUP_ROUTE.concat('&fields=id,name,displayName,organisationUnits'))
 
             const response = await request.json()
 
@@ -207,11 +211,15 @@ const App = () => {
         }
     }
 
+
+
     const handleDesignPage = () => {
         setRenderPage(PAGE_DESIGN)
     }
 
     const handleReportPage = _ => {
+        setSelectedReportContent(null)
+        setSelectedReport(null)
         setRenderPage(PAGE_REPORT)
     }
 
@@ -224,7 +232,7 @@ const App = () => {
     }
 
     const generateTeiReport = (tei) => {
-        inject_tei_into_html(reports?.find(report => report.id === selectedReport), tei, selectedProgramTrackerFromHTML, setNotif, legends)
+        inject_tei_into_html(selectedReportContent, tei, selectedProgramTrackerFromHTML, setNotif)
         setVisibleListTei(false)
         setSelectedTEI(tei)
     }
@@ -315,6 +323,8 @@ const App = () => {
                         selectedOrgUnits={selectedOrgUnits}
                         selectedPeriod={selectedPeriod}
                         selectedReport={selectedReport}
+                        selectedReportContent={selectedReportContent}
+                        setSelectedReportContent={setSelectedReportContent}
                         setCurrentOrgUnits={setCurrentOrgUnits}
                         setDataType={setDataType}
                         setExpandedKeys={setExpandedKeys}
@@ -331,7 +341,7 @@ const App = () => {
                         selectedProgram={selectedProgram}
                         me={me}
                         setSelectedTEI={setSelectedTEI}
-                        loadingLegends={loadingLegends}
+                        loadingLegendContents={loadingLegendContents}
                         searchProperties={searchProperties}
                         setSearchProperties={setSearchProperties}
                         dataTypesFromHTML={dataTypesFromHTML}
@@ -362,7 +372,7 @@ const App = () => {
                     {
                         renderPage === PAGE_REPORT && (
                             <ReportsPage
-                                selectedReport={reports?.find(dataS => dataS.id === selectedReport)}
+                                selectedReport={selectedReportContent}
                                 dataValues={dataValues}
                                 searchProperties={searchProperties}
                                 minLevel={minLevel}
@@ -380,6 +390,8 @@ const App = () => {
                                 currentOrgUnits={currentOrgUnits}
                                 setNotif={setNotif}
                                 smsConfigs={smsConfigs}
+                                lengendContents={legendContents}
+                                legends={legends}
                             />
                         )
                     }
@@ -396,10 +408,9 @@ const App = () => {
                                 setNotif={setNotif}
                                 reports={reports}
                                 legends={legends}
-                                images={images}
                                 setLoadingReports={setLoadingReports}
                                 setReports={setReports}
-                                loadingLegends={loadingLegends}
+                                loadingLegendContents={loadingLegendContents}
                                 loadingReports={loadingReports}
                             />
                         )
@@ -412,9 +423,12 @@ const App = () => {
                                 me={me}
                                 setNotif={setNotif}
                                 legends={legends}
+                                lengendContents={legendContents}
+                                setLegendContentss={setLegendContents}
                                 setLegends={setLegends}
-                                loadingLegends={loadingLegends}
+                                loadingLegendContents={loadingLegendContents}
                                 setLoadingLegends={setLoadingLegends}
+                                loadLegendContents={loadLegendContents}
                             />
                         )
                     }
@@ -476,7 +490,6 @@ const App = () => {
                             <Table.Column>Actions</Table.Column>
                         </Table.Header>
                         <Table.Body>
-
                             {teis.map((tei, index) => (
                                 <Table.Row key={index}>
                                     {selectedProgramTrackerFromHTML?.programTrackedEntityAttributes?.map(programTrackedEntityAttribute => (
@@ -489,7 +502,6 @@ const App = () => {
                                     </Table.Cell>
                                 </Table.Row>
                             ))}
-
                         </Table.Body>
                     </Table>}
 
@@ -524,7 +536,6 @@ const App = () => {
                 <MyNotification notification={notif} setNotification={setNotif} />
             </div>
         </NextUIProvider>
-
     )
 }
 

@@ -2,14 +2,15 @@
 
 import axios from "axios"
 import dayjs from "dayjs"
-import { TRACKER_ENTITY_INSTANCES_ROUTE, DATA_STORE_ROUTE } from "../api.routes"
+import { TRACKER_ENTITY_INSTANCES_ROUTE, DATA_STORE_ROUTE, ONE_ORG_UNIT_GROUP_ROUTE } from "../api.routes"
 import { ATTRIBUTE, COLOR, CURRENT, DATA_ELEMENT, DATE, DAY, ENROLLMENT, ENROLLMENT_DATE, IMAGE, INCIDENT_DATE, LABEL, MONTH, NOTIFICATON_WARNING, ORGANISATION_UNIT_NAME, OTHER_ELEMENT, SELECTED_DATE, TRACKER, YEAR } from "./constants"
 
 
 
-const drawCamember = (legendTypeId, legends, attribute_code, value, current_html_element) => {
+const drawCamember = async (legendTypeId, attribute_code, value, current_html_element) => {
 
-  const current_legend = legends.find(leg => leg.id === legendTypeId)
+  const current_legend = legendContentList?.find(leg => leg.id === legendTypeId)
+
 
   if (current_legend && current_html_element) {
 
@@ -59,7 +60,7 @@ const injectFromId = (id, value) => {
 }
 
 
-const defaultValueToApply = (attribute, item) => {
+const defaultNotApplicableValueToApply = (attribute, item) => {
 
   if (item.defaultType === COLOR) {
     injectFromId(attribute, '<span style="color: ' + item.notApplicable + '; height:100%; width: 100%;"></span>')
@@ -75,22 +76,26 @@ const defaultValueToApply = (attribute, item) => {
 
 }
 
-const defaultMissingValueToApply = (attribute, item) => {
+const defaultMissingValueToApply = async (attribute, item) => {
+  try {
 
-  if (item.defaultType === COLOR && item.missingData) {
-    injectFromId(attribute, '<span style="color: ' + item.missingData + '; height:100%; width: 100%;"></span>')
-  }
+    if (item.defaultType === COLOR && item.missingData) {
+      injectFromId(attribute, '<span style="color: ' + item.missingData + '; height:100%; width: 100%;"></span>')
+    }
 
-  if (item.defaultType === IMAGE && item.missingData) {
-    injectFromId(attribute, "<img src='" + item.missingData + "' style='width: 40px; height:40px;' />")
-  }
+    if (item.defaultType === IMAGE && item.missingData) {
+      injectFromId(attribute, "<img src='" + item.missingData + "' style='width: 40px; height:40px;' />")
+    }
 
-  if (item.defaultType === LABEL && item.missingData) {
-    injectFromId(attribute, "<span>" + item.missingData + "</span>")
-  }
+    if (item.defaultType === LABEL && item.missingData) {
+      injectFromId(attribute, "<span>" + item.missingData + "</span>")
+    }
+  } catch (err) { }
 }
 
 const findTheRightLegend = (currentLegendParent, period, periodType) => {
+  if (!currentLegendParent)
+    return null
 
   let currentLegend = null
   const legendSetListKey = Object.keys(currentLegendParent?.periods)
@@ -101,10 +106,7 @@ const findTheRightLegend = (currentLegendParent, period, periodType) => {
 
     if (legendWithNoEndDate?.length > 0 && parseInt(dayjs(legendWithNoEndDate[0]).format('YYYY')) <= parseInt(dayjs(period).format('YYYY'))) {
       currentLegend = currentLegendParent?.periods[`${legendWithNoEndDate[0]}`]
-      console.log("Current: ", currentLegend)
     } else {
-      console.log("pas trouver ....")
-      console.log("on utilise : ", legendWithEndDate)
 
       const filteredLegend = legendWithEndDate.reduce((prev, current) => {
         const start = parseInt(dayjs(current.split('_')[0]).format('YYYY'))
@@ -128,63 +130,45 @@ const findTheRightLegend = (currentLegendParent, period, periodType) => {
 
     if (legendWithNoEndDate?.length > 0 && (dayjs(legendWithNoEndDate[0]).startOf('month').isBefore(dayjs(period).startOf('month')) || dayjs(legendWithNoEndDate[0]).startOf('month').isSame(dayjs(period).startOf('month')))) {
       currentLegend = currentLegendParent?.periods[`${legendWithNoEndDate[0]}`]
-      console.log("Current: ", currentLegend)
     } else {
-      console.log("pas trouver ....")
-      console.log("on utilise : ", legendWithEndDate)
 
       const filteredLegend = legendWithEndDate.reduce((prev, current) => {
         const start = dayjs(current.split('_')[0]).startOf('month')
         const end = dayjs(current.split('_')[1]).endOf('month')
         const dateChoosed = dayjs(period).startOf('month')
 
-        console.log("Start of month : ", start)
-        console.log("End of month : ", end)
-        console.log("date : ", dateChoosed)
-
         if ((dayjs(start).isBefore(dateChoosed) || dayjs(start).isSame(dateChoosed)) && (dayjs(dateChoosed).isBefore(end) || dayjs(dateChoosed).isSame(end))) {
           prev.push(current)
         }
 
-        console.log("prev ,:", prev)
         return prev
       }, [])
 
       currentLegend = currentLegendParent?.periods[`${filteredLegend[0]}`]
-      console.log("Current legend : ", currentLegend)
     }
   }
 
   if (periodType === DAY) {
-    console.log("Le type de period est : day : ")
     const legendWithNoEndDate = legendSetListKey.filter(l => l?.split('_')[1] ? false : true) || []
     const legendWithEndDate = legendSetListKey.filter(l => l?.split('_')[1] ? true : false) || []
 
     if (legendWithNoEndDate?.length > 0 && (dayjs(legendWithNoEndDate[0]).isBefore(dayjs(period)) || dayjs(legendWithNoEndDate[0]).isSame(dayjs(period)))) {
       currentLegend = currentLegendParent?.periods[`${legendWithNoEndDate[0]}`]
-      console.log("Current: ", currentLegend)
     } else {
-      console.log("pas trouver ....")
-      console.log("on utilise : ", legendWithEndDate)
 
       const filteredLegend = legendWithEndDate.reduce((prev, current) => {
         const start = dayjs(current.split('_')[0])
         const end = dayjs(current.split('_')[1])
         const dateChoosed = dayjs(period)
 
-        console.log("Start of month : ", start)
-        console.log("End of month : ", end)
-
         if ((dayjs(start).isBefore(dateChoosed) || dayjs(start).isSame(dateChoosed)) && (dayjs(dateChoosed).isBefore(end) || dayjs(dateChoosed).isSame(end))) {
           prev.push(current)
         }
 
-        console.log("prev du daily : ", prev)
         return prev
       }, [])
 
       currentLegend = currentLegendParent?.periods[`${filteredLegend[0]}`]
-      console.log("current :", currentLegend)
     }
   }
 
@@ -196,8 +180,8 @@ const displayNotificationIfLegendIsNotSet = (setNotif, legendName, period) => {
   setNotif({ show: true, message: `Some legends have not been configured for the selected period ( ${dayjs(period).format('YYYY')} ) , the values ​​will be displayed instead of these legends ! `, type: NOTIFICATON_WARNING })
 }
 
-const checkLabelLegend = (legendTypeId, legends, attribute_code, value, period, setNotif, periodType) => {
-  const current_legend_parent = legends.find(leg => leg.id === legendTypeId)
+const checkLabelLegend = async (legendTypeId, attribute_code, value, period, setNotif, periodType, legendContentList) => {
+  const current_legend_parent = legendContentList?.find(leg => leg.id === legendTypeId)
   const current_legend = findTheRightLegend(current_legend_parent, period, periodType)
 
   if (current_legend && current_legend.items?.length > 0) {
@@ -218,8 +202,9 @@ const checkLabelLegend = (legendTypeId, legends, attribute_code, value, period, 
 }
 
 
-const checkColorLegend = (legendTypeId, legends, attribute_code, value, period, setNotif, periodType) => {
-  const current_legend_parent = legends.find(leg => leg.id === legendTypeId)
+const checkColorLegend = async (legendTypeId, attribute_code, value, period, setNotif, periodType, legendContentList) => {
+  const current_legend_parent = legendContentList?.find(leg => leg.id === legendTypeId)
+
   const current_legend = findTheRightLegend(current_legend_parent, period, periodType)
 
 
@@ -263,9 +248,10 @@ const checkColorLegend = (legendTypeId, legends, attribute_code, value, period, 
   }
 }
 
-const checkImageLegend = (legendTypeId, legends, attribute_code, value, period, setNotif, periodType) => {
 
-  const current_legend_parent = legends.find(leg => leg.id === legendTypeId)
+const checkImageLegend = async (legendTypeId, attribute_code, value, period, setNotif, periodType, legendContentList) => {
+
+  const current_legend_parent = legendContentList?.find(leg => leg.id === legendTypeId)
   const current_legend = findTheRightLegend(current_legend_parent, period, periodType)
 
   if (current_legend && current_legend.items?.length > 0) {
@@ -295,23 +281,23 @@ const checkImageLegend = (legendTypeId, legends, attribute_code, value, period, 
 }
 
 
-const inject_legend = (legendType, legendId, legends, attribute_code, value, period, setNotif, periodType) => {
-  if (legendType && legendId && legends && attribute_code && value && period) {
+const inject_legend = (legendType, legendId, attribute_code, value, period, setNotif, periodType, legendContentList) => {
+  if (legendType && legendId && attribute_code && value && period) {
     switch (legendType) {
       case "color":
-        checkColorLegend(legendId, legends, attribute_code, value, period, setNotif, periodType)
+        checkColorLegend(legendId, attribute_code, value, period, setNotif, periodType, legendContentList)
         break
 
       case "label":
-        checkLabelLegend(legendId, legends, attribute_code, value, period, setNotif, periodType)
+        checkLabelLegend(legendId, attribute_code, value, period, setNotif, periodType, legendContentList)
         break
 
       case "image":
-        checkImageLegend(legendId, legends, attribute_code, value, period, setNotif, periodType)
+        checkImageLegend(legendId, attribute_code, value, period, setNotif, periodType, legendContentList)
         break
 
       case "pie":
-        drawCamember(legendId, legends, attribute_code, value, html_id_code, period, setNotif, periodType)
+        drawCamember(legendId, attribute_code, value, html_id_code, period, setNotif, periodType, legendContentList)
         break
 
       default:
@@ -321,14 +307,14 @@ const inject_legend = (legendType, legendId, legends, attribute_code, value, per
 }
 
 
-export const inject_tei_into_html = (report, current_tei, selectedProgramTrackerFromHTML, setNotif, legends) => {
+export const inject_tei_into_html = (report, current_tei, selectedProgramTrackerFromHTML, setNotif) => {
 
   if (!selectedProgramTrackerFromHTML)
-    return console.log("pas de program selectionner")
+    return null
 
 
   if (!current_tei)
-    return console.log("pas de tei selectionner")
+    return null
 
   let my_container = document.querySelector('[id="my-table-container"]')
   const report_html_cloned = report.html
@@ -390,7 +376,7 @@ export const inject_tei_into_html = (report, current_tei, selectedProgramTracker
           const get_legend_ID = get_id.split("|")?.[2]
 
           if (get_legend_ID && get_legend_type) {
-            inject_legend(get_legend_type, get_legend_ID, legends, get_id, attribute_found.value, setNotif)
+            inject_legend(get_legend_type, get_legend_ID, get_id, attribute_found.value, setNotif)
           }
         }
 
@@ -455,18 +441,16 @@ export const inject_tei_into_html = (report, current_tei, selectedProgramTracker
   }
 }
 
-export const injectDataIntoHtml = (dataValues, { html }, legends, orgUnits, levels, selectedOrgUnit, period, periodType, setNotif) => {
+export const injectDataIntoHtml = (dataValues, { html }, orgUnits, levels, selectedOrgUnit, period, periodType, setNotif, legendContentList) => {
   if (selectedOrgUnit) {
     let my_container = document.querySelector('[id="my-table-container"]')
 
-    console.log("Period type : ", periodType)
 
     const html_elements_list = my_container.querySelectorAll('[data-type="AGGREGATE"]')
 
     for (let html_el of html_elements_list) {
       const html_ID = html_el.getAttribute('id')
       const data_has_legend = html_el.getAttribute('data-has-legend')
-      const data_has_organisationUnitGroup = html_el.getAttribute('data-has-organisationUnitGroup')
 
       // If no legend 
       if (data_has_legend === 'NO' && html_ID) {
@@ -518,19 +502,19 @@ export const injectDataIntoHtml = (dataValues, { html }, legends, orgUnits, leve
 
               switch (legend_type) {
                 case "color":
-                  checkColorLegend(legend_id, legends, html_ID, value, period, setNotif, periodType)
+                  checkColorLegend(legend_id, html_ID, value, period, setNotif, periodType, legendContentList)
                   break
 
                 case "label":
-                  checkLabelLegend(legend_id, legends, html_ID, value, period, setNotif, periodType)
+                  checkLabelLegend(legend_id, html_ID, value, period, setNotif, periodType, legendContentList)
                   break
 
                 case "image":
-                  checkImageLegend(legend_id, legends, html_ID, value, period, setNotif, periodType)
+                  checkImageLegend(legend_id, html_ID, value, period, setNotif, periodType, legendContentList)
                   break
 
                 case "pie":
-                  drawCamember(legend_id, legends, html_ID, value, html_el, period, periodType)
+                  drawCamember(legend_id, html_ID, value, html_el, period, periodType, legendContentList)
                   break
 
                 default:
@@ -743,11 +727,8 @@ export const getOrgUnitParentFromHtml = (selectedOU, orgUnits, orgUnitLevels) =>
     }
   }
 
-
   return uid_list
 }
-
-
 
 
 export const getFileAsBase64 = (file) => {
@@ -784,37 +765,65 @@ export const getAggregateDimensionsList = report => {
 }
 
 
-export const cleanAggrateDimensionData = (report, legends, dimensions, period) => {
+export const cleanAggrateDimensionData = (report, dimensions, period, periodType, selectedOU, orgUnits, orgUnitLevels, legendContentList, organisationUnitGroups) => {
   if (report) {
     const aggregateElements = document.querySelectorAll('[data-type="AGGREGATE"]')
     for (let el of aggregateElements) {
       const el_ID = el?.getAttribute('id')
       const legend_id = el_ID?.split('|')?.[2]
       const data_has_organisationUnitGroup = el.getAttribute('data-has-organisationunitgroup')
+      const OrgUnitString = el_ID?.split('|')?.[1]
 
       el.innerHTML = ""
       el.style.background = "transparent"
       el.style.color = "#000000"
 
-      dimensions.forEach(d => {
-        if (el_ID?.includes(d)) {
+      for (let d of dimensions) {
+        if (el_ID?.includes(d) && legend_id) {
 
-          const current_legend_parent = legends.find(leg => leg.id === legend_id)
-          const current_legend = current_legend_parent?.periods?.[`${dayjs(period).format('YYYY')}`]
+          const current_legend_parent = legendContentList.find(leg => leg.id === legend_id)
+          const current_legend = findTheRightLegend(current_legend_parent, period, periodType)
 
           if (current_legend_parent && current_legend) {
             if (!data_has_organisationUnitGroup || data_has_organisationUnitGroup === "NO") {// ====> VALEUR MANQUANTE
               defaultMissingValueToApply(el_ID, current_legend)
             }
 
-            if (data_has_organisationUnitGroup === "YES") {  // ====> NON APPLICABLE 
-              defaultValueToApply(el_ID, current_legend)
+            // ====> NON APPLICABLE legend
+            if (data_has_organisationUnitGroup === "YES") {
+              const ouGId = el_ID?.split('|')?.[4]
+              const ou = getOrgUnitIdFromParentString(OrgUnitString, selectedOU, orgUnits, orgUnitLevels)
+
+              if (ou && ouGId) {
+                if (checkIfOuInGroup(ouGId, ou.id, organisationUnitGroups)) {
+                  defaultMissingValueToApply(el_ID, current_legend)
+                } else {
+                  defaultNotApplicableValueToApply(el_ID, current_legend)
+                }
+              } else {
+                defaultNotApplicableValueToApply(el_ID, current_legend)
+              }
             }
           }
-
         }
-      })
+      }
     }
+  }
+}
+
+
+const checkIfOuInGroup = (ouGId, ou_id, organisationUnitGroups) => {
+  try {
+    // const response = await axios.get(`${ONE_ORG_UNIT_GROUP_ROUTE}/${ouGId}.json?fields=organisationUnits[id]`)
+    const organisatinUnitGroup = organisationUnitGroups.find(ouG => ouG.id === ouGId)
+
+    if (organisatinUnitGroup?.organisationUnits.map(ou => ou.id).includes(ou_id)) {
+      return true
+    } else {
+      return false
+    }
+  } catch (err) {
+    return false
   }
 }
 
@@ -843,7 +852,6 @@ export const updateAndInjectSchoolNames = (report, selectedOu, organisationUnits
           }
         }
 
-
         el.innerHTML = ouNames.map(ouName => ouName.name).join(" - ")
       }
     }
@@ -851,23 +859,24 @@ export const updateAndInjectSchoolNames = (report, selectedOu, organisationUnits
   }
 }
 
-export const updateAndInjectOtherElementPeriod = (report, selectedDate) => {
+
+export const updateAndInjectOtherElementPeriod = (report, selectedDate, selectedPeriodType) => {
   if (report) {
     const otherElementsHTML = document.querySelectorAll('[data-type="'.concat(OTHER_ELEMENT).concat('"]'))
 
     for (let el of otherElementsHTML) {
-
       const data_is = el.getAttribute('data-is')
 
       if (data_is === SELECTED_DATE) {
 
         el.innerHTML = ""
-        el.innerHTML = selectedDate
+        el.innerHTML = formatPeriodForAnalytic(selectedDate, selectedPeriodType)
 
       }
     }
   }
 }
+
 
 export const loadDataStore = async (key_string, setLoading, setState, payload = null) => {
   try {
@@ -886,12 +895,12 @@ export const loadDataStore = async (key_string, setLoading, setState, payload = 
     return data
   } catch (err) {
     setLoading && setLoading(false)
-    createDataToDataStore(key_string, payload ? payload : [])
+    await createDataToDataStore(key_string, payload ? payload : [])
     console.clear()
   }
 }
 
-export const saveDataToDataStore = async (key_string, payload, setLoading, setState, setErrorMessage) => {
+export const saveDataToDataStore = async (key_string, payload, setLoading, setState, setErrorMessage, createIfNotExist = false) => {
   try {
 
     if (!key_string)
@@ -901,10 +910,20 @@ export const saveDataToDataStore = async (key_string, payload, setLoading, setSt
       throw new Error('Veuillez ajoutée le payload à sauvegarder dans le datastore !')
 
     setLoading && setLoading(true)
-
     const route = `${DATA_STORE_ROUTE}/${process.env.REACT_APP_DATA_STORE_NAME}/${key_string}`
-    const response = await axios.put(route, payload)
-    const data = response.data
+    let response = null
+
+    if (createIfNotExist) {
+      //  The will first check if this key exist before make some put (update) or make post ( create new )
+      try {
+        await loadDataStore(key_string, null, null, {})
+      } catch (err) {
+      }
+    }
+
+    response = await axios.put(route, payload)
+
+    const data = response?.data
 
     setState && setState(data)
     setLoading && setLoading(false)
@@ -930,7 +949,34 @@ export const createDataToDataStore = async (key_string, payload) => {
     return true
 
   } catch (err) {
-    console.log(err)
     throw err
   }
+}
+
+
+export const deleteKeyFromDataStore = async (key_string) => {
+  try {
+
+    if (!key_string)
+      throw new Error('Veuillez préciser le key_string du datastore à récupérer')
+
+    const route = `${DATA_STORE_ROUTE}/${process.env.REACT_APP_DATA_STORE_NAME}/${key_string}`
+    await axios.delete(route)
+
+    return true
+
+  } catch (err) {
+    // throw err
+  }
+}
+
+
+
+export const formatPeriodForAnalytic = (period, periodType) => {
+  if (periodType === DAY)
+    return dayjs(period).format('YYYYMMDD')
+  if (periodType === YEAR)
+    return dayjs(period).format('YYYY')
+  if (periodType === MONTH)
+    return dayjs(period).format('YYYYMM')
 }

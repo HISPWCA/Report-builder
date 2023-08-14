@@ -105,11 +105,9 @@
             this.events = {
                 // This will be called after modules are initialized.
                 'summernote.init': function (we, e) {
-                    //console.log('summernote initialized', we, e);
                 },
                 // This will be called when user releases a key on editable.
                 'summernote.keyup': function (we, e) {
-                    //  console.log('summernote keyup', we, e);
                 }
             };
 

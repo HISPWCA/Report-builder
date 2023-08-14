@@ -54,7 +54,6 @@ const DimensionsDialog = ({
             setLoadingPrograms(false)
             setPrograms(programs)
         } catch (err) {
-            console.log(err)
             setLoadingPrograms(false)
         }
     }

@@ -39,7 +39,7 @@ import { DataDimension } from '@dhis2/analytics'
 import { IoSettingsOutline } from 'react-icons/io5'
 import { AiOutlineSearch } from 'react-icons/ai'
 import { AiFillCloseCircle } from 'react-icons/ai'
-import { loadDataStore, saveDataToDataStore } from '../utils/fonctions'
+import { loadDataStore, saveDataToDataStore, deleteKeyFromDataStore } from '../utils/fonctions'
 
 const summernoteConfig = {
   height: 500,
@@ -85,7 +85,7 @@ const DesignsPage = ({
   setReports,
   loadingReports,
   setLoadingReports,
-  loadingLegends,
+  loadingLegendContents,
   setNotif
 }) => {
 
@@ -98,11 +98,11 @@ const DesignsPage = ({
   const [searchProperties, setSearchProperties] = useState([])
   const [activeElementID, setActiveElementID] = useState(null)
   const [currentRepport, setCurrentReport] = useState(null)
+  const [currentRepportContent, setCurrentReportContent] = useState(null)
   const [currentDimensionSelected, setCurrentDimensionSelected] = useState(null)
   const [isSearchMode, setSearchMode] = useState(false)
   const [searchInAllInput, setSearchInAllInput] = useState("")
 
-  const [selectedConfigDimensions, setSelectedConfigDimensions] = useState([])
   const [selectedConfigDimensionsAggregate, setSelectedConfigDimensionsAggregate] = useState([])
   const [selectedTypeLegendToDisplay, setSelectedTypeLegendToDisplay] = useState(null)
   const [selectedOuLevelToDisplay, setSelectedOuLevelToDisplay] = useState(null)
@@ -159,19 +159,19 @@ const DesignsPage = ({
     })
   }
 
-  const initState = async (curr) => {
+  const initState = async (curr, currContent) => {
     try {
-      if (curr) {
+      if (curr && currContent) {
         setLoadingInitState(true)
 
-        setSelectedConfigDimensions(curr?.dimensions?.dx || [])
         setReportName(curr.name)
         setCurrentReport(curr)
+        setCurrentReportContent(currContent)
 
-        initSummernote(curr.html)
+        initSummernote(currContent.html)
         setLoadingInitState(false)
-        setSelectedProgram(curr.selectedProgram)
-        setSearchProperties(curr.searchProperties)
+        setSelectedProgram(currContent.selectedProgram)
+        setSearchProperties(currContent.searchProperties)
       } else {
         setVisibleAddReport(false)
         setEditReport(false)
@@ -179,7 +179,6 @@ const DesignsPage = ({
       }
 
     } catch (err) {
-      console.log(err)
       setNotif({ show: true, type: NOTIFICATON_CRITICAL, message: err.message })
       setLoadingInitState(false)
 
@@ -197,45 +196,58 @@ const DesignsPage = ({
       if (!html_code || html_code.trim() === "")
         throw new Error("Html must not empty")
 
-      let payload = {}
 
-      if (editReport && currentRepport) {
+
+      let payload = {}
+      let payloadReportContent = {}
+
+      if (editReport && currentRepport && currentRepportContent) {
         payload = reports.map(rep => {
           if (rep.id === currentRepport.id) {
             return {
               ...rep,
-              dimensions: {
-                ...rep.dimensions,
-                dx: selectedConfigDimensions
-              },
-              html: html_code,
               name: reportName,
-              selectedProgram: selectedProgram,
               updatedAt: dayjs(),
-              searchProperties
             }
           } else {
             return rep
           }
         })
 
+        payloadReportContent = {
+          ...currentRepportContent,
+          html: html_code,
+          selectedProgram: selectedProgram,
+          name: reportName,
+          updatedAt: dayjs(),
+          searchProperties
+        }
+
+
       } else {
+        const reportId = uuid()
         payload = [
           {
-            ...currentRepport,
-            html: html_code,
+            id: reportId,
             name: reportName,
             createdAt: dayjs(),
             updatedAt: dayjs(),
-            id: uuid(),
-            searchProperties,
-            selectedProgram: selectedProgram
           },
           ...reports
         ]
-      }
 
-      await saveDataToDataStore(process.env.REACT_APP_REPORTS_KEY, payload, setLoadingProcess, null, null)
+        payloadReportContent = {
+          id: reportId,
+          name: reportName,
+          html: html_code,
+          searchProperties,
+          selectedProgram: selectedProgram,
+          createdAt: dayjs(),
+          updatedAt: dayjs(),
+        }
+      }
+      await saveDataToDataStore(process.env.REACT_APP_REPORTS_KEY, payload, null, null, null)
+      await saveDataToDataStore(`REPORT_${payloadReportContent.id}`, payloadReportContent, null, null, null, true)
       loadDataStore(process.env.REACT_APP_REPORTS_KEY, setLoadingReports, setReports, [])
 
       cleanStateAfterReportSaved()
@@ -246,7 +258,6 @@ const DesignsPage = ({
       setNotif({ show: true, message: 'Report saved !', type: NOTIFICATON_SUCCESS })
 
     } catch (err) {
-      console.log(err)
       setLoadingProcess(false)
       setNotif({ show: true, message: err.response?.data?.message || err.message, type: NOTIFICATON_CRITICAL })
     }
@@ -254,9 +265,10 @@ const DesignsPage = ({
 
   const cleanStateAfterReportSaved = () => {
     setCurrentReport(null)
+    setCurrentReportContent(null)
+    setReportName(null)
 
     setCheckedKeys(null)
-    setSelectedConfigDimensions([])
     setSelectedTypeLegendToDisplay(null)
     setSelectedOuLevelToDisplay(null)
     setCurrentHtmlTagSelected(null)
@@ -552,7 +564,7 @@ const DesignsPage = ({
         <Button onClick={handleCloseSaveModal} secondary>
           close
         </Button>
-        <Button onClick={() => handleSaveReport()} primary disabled={loadingProcess} loading={loadingProcess}>
+        <Button onClick={handleSaveReport} primary disabled={loadingProcess} loading={loadingProcess}>
           Save Report
         </Button>
       </ButtonStrip>
@@ -642,7 +654,7 @@ const DesignsPage = ({
         <>
           <div className='mt-2'>
             {
-              loadingLegends && (
+              loadingLegendContents && (
                 <div className='d-flex'> <CircularLoader small /> <span className='ml-2'>Loading...</span></div>
               )
             }
@@ -940,7 +952,7 @@ const DesignsPage = ({
           <>
             <div className='mt-2'>
               {
-                loadingLegends && (
+                loadingLegendContents && (
                   <div className='d-flex'> <CircularLoader small /> <span className='ml-2'>Loading...</span></div>
                 )
               }
@@ -1075,6 +1087,7 @@ const DesignsPage = ({
 
   const handleCancelEditReport = () => {
     setCurrentReport(null)
+    setCurrentReportContent(null)
     setEditReport(false)
     setVisibleAddReport(false)
     cleanStateAfterReportSaved()
@@ -1378,7 +1391,9 @@ const DesignsPage = ({
         {editReport && currentRepport ? <div style={{ fontSize: '16px', fontWeight: 'bold', }}> {currentRepport.name} </div> : <div style={{ fontWeight: 'bold', fontSize: '16px' }}> Design Interface</div>}
       </div>
 
+
       <div className='row py-4 px-3' >
+        {editReport && currentRepport && !currentRepportContent && <NoticeBox warning>{`${currentRepport?.name} Content not found !`}</NoticeBox>}
         <div className='col-md-9'>
           <div className="my-1">
             <Button onClick={() => setVisibleConfigurationModal(true)} primary icon={<IoSettingsOutline style={{ color: '#fff' }} />}>Configuration</Button>
@@ -1436,6 +1451,8 @@ const DesignsPage = ({
         const newPayload = reports.filter(r => r.id !== id)
 
         await saveDataToDataStore(process.env.REACT_APP_REPORTS_KEY, newPayload, setLoadingProcess, null, null)
+        await deleteKeyFromDataStore(`REPORT_${id}`)
+        //  (process.env.REACT_APP_REPORTS_KEY, newPayload, setLoadingProcess, null, null)
         loadDataStore(process.env.REACT_APP_REPORTS_KEY, setLoadingReports, setReports, [])
 
         setNotif({ show: true, message: 'Delete success !', type: NOTIFICATON_SUCCESS })
@@ -1453,10 +1470,18 @@ const DesignsPage = ({
   }
 
 
-  const handleEditReport = (report) => {
-    setVisibleAddReport(true)
-    setEditReport(true)
-    initState(report)
+  const handleEditReport = async (report) => {
+    try {
+      setVisibleAddReport(true)
+      setEditReport(true)
+      const content = await loadDataStore(`REPORT_${report.id}`, setLoadingInitState, null, {})
+      if (!content)
+        throw new Error(report.name + " Content not found !")
+
+      initState(report, content)
+    } catch (err) {
+      setNotif({ show: true, message: err.response?.data?.message || err.message, type: NOTIFICATON_CRITICAL })
+    }
   }
 
 

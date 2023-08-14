@@ -29,8 +29,7 @@ import { BiEdit } from 'react-icons/bi'
 import { RiDeleteBinLine } from 'react-icons/ri'
 import { FiSave } from 'react-icons/fi'
 import { DatePicker, Divider, Popconfirm, Popover, Table as TableAntd } from 'antd'
-import { getFileAsBase64, loadDataStore, saveDataToDataStore } from '../utils/fonctions'
-import { AiFillDelete } from 'react-icons/ai'
+import { deleteKeyFromDataStore, getFileAsBase64, loadDataStore, saveDataToDataStore } from '../utils/fonctions'
 import { FaRegClone } from 'react-icons/fa'
 import { TiEdit } from 'react-icons/ti'
 import dayjs from 'dayjs'
@@ -40,9 +39,10 @@ import { QuestionCircleOutlined } from '@ant-design/icons'
 const LegendPage = ({
     setNotif,
     legends,
-    loadingLegends,
+    loadingLegendContents,
     setLoadingLegends,
-    setLegends
+    setLegends,
+    loadLegendContents
 }) => {
 
     const [visibleSaveLegendPeriodPopup, setVisibleSaveLegendPeriodPopup] = useState(false)
@@ -72,6 +72,7 @@ const LegendPage = ({
     const [editLegendItem, setEditLegendItem] = useState(false)
     const [editLegend, setEditLegend] = useState(false)
     const [currentLegend, setCurrentLegend] = useState(null)
+    const [currentLegendContent, setCurrentLegendContent] = useState(null)
     const [currentLegendItem, setCurrentLegendItem] = useState(null)
     const [min, setMin] = useState(null)
     const [max, setMax] = useState(null)
@@ -80,6 +81,7 @@ const LegendPage = ({
     const [currentLegendIdToDelete, setCurrentLegendIdToDelete] = useState(null)
 
     const [loadingProcess, setLoadingProcess] = useState(false)
+    const [loadingCurrentLegendContent, setLoadingCurrentLegendContent] = useState(false)
 
     const handleNewLegendBtn = () => {
         setVisibleNewLegendForm(true)
@@ -175,7 +177,6 @@ const LegendPage = ({
             setVisibleAddLegendItem(false)
         } catch (err) {
             setErrorMessageLegendItem(err.message)
-            console.log(err)
         }
     }
 
@@ -188,13 +189,15 @@ const LegendPage = ({
                 const newPayload = legends.filter(r => r.id !== id)
 
                 await saveDataToDataStore(process.env.REACT_APP_LEGENDS_KEY, newPayload, null)
+                await deleteKeyFromDataStore(`LEGEND_${id}`)
+
                 loadDataStore(process.env.REACT_APP_LEGENDS_KEY, setLoadingLegends, setLegends, [])
 
                 setNotif({ show: true, message: 'Delete success', type: NOTIFICATON_SUCCESS })
                 setLoadingProcess(false)
                 setCurrentLegendIdToDelete(null)
             } else {
-                throw new Error("No report selected ")
+                throw new Error("No legend selected ")
             }
 
         } catch (err) {
@@ -204,30 +207,44 @@ const LegendPage = ({
     }
 
 
-    const handleEditLegend = leg => {
-        setEditLegend(true)
-        setLegendPeriods(leg.periods ?
-            Object.entries(leg.periods).map(([key, val]) => (
-                {
-                    ...val,
-                    name: key
-                }
-            )) : [])
-        setCurrentLegend(leg)
-        initLegendState(leg)
-        setVisibleNewLegendForm(true)
+    const handleEditLegend = async leg => {
+        try {
+            setLoadingCurrentLegendContent(true)
+            setEditLegend(true)
+            setCurrentLegend(leg)
+            setVisibleNewLegendForm(true)
+
+            const legContent = await loadDataStore(`LEGEND_${leg.id}`, null, null, {})
+            if (!legContent)
+                throw new Error(leg.name + " Content not found !")
+
+            setLegendPeriods(legContent.periods ?
+                Object.entries(legContent.periods).map(([key, val]) => (
+                    {
+                        ...val,
+                        name: key
+                    }
+                )) : [])
+            setCurrentLegendContent(legContent)
+
+            initLegendState(leg, legContent)
+            setLoadingCurrentLegendContent(false)
+        } catch (err) {
+            setNotif({ show: true, message: err.response?.data?.message || err.message, type: NOTIFICATON_CRITICAL })
+            setLoadingCurrentLegendContent(false)
+        }
     }
 
-    const initLegendState = (currLeg) => {
-        if (currLeg) {
-            setLegendDefaultNotApplicable(currLeg.notApplicable)
-            setLegendDefaultMissingData(currLeg.missingData)
-            setLegendDefaultType(currLeg.defaultType)
-            setLegendItemList(currLeg.items || [])
-            setLegendName(currLeg.name)
-            setMin(currLeg.min)
-            setMax(currLeg.max)
-            setIntervalSpace(currLeg.intervalSpace)
+    const initLegendState = (currLeg, currentLegContent) => {
+        if (currLeg && currentLegContent) {
+            setLegendDefaultNotApplicable(currentLegContent.notApplicable)
+            setLegendDefaultMissingData(currentLegContent.missingData)
+            setLegendDefaultType(currentLegContent.defaultType)
+            setLegendItemList(currentLegContent.items || [])
+            setLegendName(currentLegContent.name)
+            setMin(currentLegContent.min)
+            setMax(currentLegContent.max)
+            setIntervalSpace(currentLegContent.intervalSpace)
         }
     }
 
@@ -240,53 +257,62 @@ const LegendPage = ({
 
     const handleSaveLegend = async () => {
         try {
+            setLoadingProcess(true)
 
             if (!legendName || legendName?.length === 0)
                 return setGenerateErrorMessage('The legend name is required')
 
 
             let payload = {}
+            let payloadLegendContent = {}
 
-            if (editLegend && currentLegend) {
-                payload = legends.map(leg => {
-                    if (leg.id === currentLegend.id) {
-                        return {
-                            ...leg,
-                            name: legendName,
-                            periods: legendPeriods.length > 0 ?
-                                legendPeriods.reduce((prev, current) => {
-                                    prev[`${current.name}`] = { ...current }
-                                    return prev
-                                }, {})
-                                : null,
-                            updatedAt: dayjs()
-                        }
-                    } else {
-                        return leg
-                    }
-                })
+            if (editLegend && currentLegend && currentLegendContent) {
+                payload = legends.map(leg => leg.id === currentLegend.id ? ({ ...leg, name: legendName, updatedAt: dayjs() }) : leg)
+                payloadLegendContent = {
+                    ...currentLegendContent,
+                    name: legendName,
+                    periods: legendPeriods.length > 0 ?
+                        legendPeriods.reduce((prev, current) => {
+                            prev[`${current.name}`] = { ...current }
+                            return prev
+                        }, {})
+                        : null,
+                    updatedAt: dayjs()
+                }
             } else {
                 if (legends.map(l => l.name).includes(legendName))
                     throw new Error("Legend already exist !")
 
+                const legendId = uuid()
+
                 payload = [
                     {
-                        id: uuid(),
+                        id: legendId,
                         name: legendName,
                         createdAt: dayjs(),
                         updatedAt: dayjs(),
-                        periods: legendPeriods.length > 0 ?
-                            legendPeriods.reduce((prev, current) => {
-                                prev[`${current.name}`] = { ...current }
-                                return prev
-                            }, {})
-                            : null
                     },
                     ...legends
                 ]
+
+                payloadLegendContent = {
+                    id: legendId,
+                    name: legendName,
+                    createdAt: dayjs(),
+                    updatedAt: dayjs(),
+                    periods: legendPeriods.length > 0 ?
+                        legendPeriods.reduce((prev, current) => {
+                            prev[`${current.name}`] = { ...current }
+                            return prev
+                        }, {})
+                        : null
+                }
             }
-            await saveDataToDataStore(process.env.REACT_APP_LEGENDS_KEY, payload, setLoadingProcess)
-            loadDataStore(process.env.REACT_APP_LEGENDS_KEY, setLoadingLegends, setLegends, [])
+            await saveDataToDataStore(process.env.REACT_APP_LEGENDS_KEY, payload, null)
+            await saveDataToDataStore(`LEGEND_${payloadLegendContent.id}`, payloadLegendContent, null, null, null, true)
+
+            const legendList = await loadDataStore(process.env.REACT_APP_LEGENDS_KEY, setLoadingLegends, setLegends, [])
+            loadLegendContents(legendList)
 
             // Clean all state 
             cleanStateAddLegend()
@@ -297,8 +323,9 @@ const LegendPage = ({
             setLegendItemList([])
             setVisibleFinishCreateLegend(false)
             setNotif({ show: true, message: "Legend saved !", type: NOTIFICATON_SUCCESS })
-
+            setLoadingProcess(false)
         } catch (err) {
+            setLoadingProcess(false)
             setVisibleFinishCreateLegend(false)
             setNotif({ show: true, message: err.message, type: NOTIFICATON_CRITICAL })
         }
@@ -319,6 +346,7 @@ const LegendPage = ({
         setLegendName(null)
         setLegendItemList([])
         setCurrentLegend(null)
+        setCurrentLegendContent(null)
     }
 
     const RenderLegendTable = () => (
@@ -333,7 +361,7 @@ const LegendPage = ({
                     </div>
 
                     <div className='mt-1'>
-                        {loadingLegends && (
+                        {loadingLegendContents && (
                             <div style={{ display: 'flex', alignItems: 'center' }}>
                                 <CircularLoader small />
                                 <span style={{ marginLeft: '10px' }}>Loading...</span>
@@ -355,27 +383,6 @@ const LegendPage = ({
                                                 <TableCell dense>
                                                     {leg.name}
                                                 </TableCell>
-
-                                                {/* <TableCell dense>
-                                        {leg.defaultType === COLOR && leg.missingData && (
-                                            <div className='d-flex align-items-center justify-content-center' style={{ backgroundColor: leg.missingData, width: "60px", height: "20px", borderRadius: "6px", fontWeight: "bold", color: '#FFF' }}> {leg.missingData} </div>
-                                        )}
-                                        {leg.defaultType === LABEL && leg.missingData && (
-                                            <div> {leg.missingData} </div>
-                                        )}
-                                        {leg.defaultType === IMAGE && leg.missingData && (
-                                            <img src={leg.missingData} style={{ height: "30px", width: "30px" }} />)}
-                                    </TableCell>
-                                    <TableCell dense>
-                                        {leg.defaultType === COLOR && leg.notApplicable && (
-                                            <div className='d-flex align-items-center justify-content-center' style={{ backgroundColor: leg.notApplicable, width: "60px", height: "20px", borderRadius: "6px", fontWeight: "bold", color: '#FFF' }}> {leg.notApplicable} </div>
-                                        )}
-                                        {leg.defaultType === LABEL && leg.notApplicable && (
-                                            <div> {leg.notApplicable} </div>
-                                        )}
-                                        {leg.defaultType === IMAGE && leg.notApplicable && (
-                                            <img src={leg.notApplicable} style={{ height: "30px", width: "30px" }} />)}
-                                    </TableCell> */}
 
                                                 <TableCell dense>
                                                     {
@@ -497,7 +504,6 @@ const LegendPage = ({
                     return prev
                 }, [])
 
-            console.log("period: ", periods)
             if (periods.length > 0)
                 throw new Error('There are already existing date range which cover your selected dates !')
 
@@ -517,7 +523,6 @@ const LegendPage = ({
                     return prev
                 }, [])
 
-            console.log("period: ", periods)
 
             if (periods.length > 0)
                 throw new Error('There are already existing date range which cover your selected dates !')
@@ -529,8 +534,6 @@ const LegendPage = ({
     const handleSaveLegendPeriod = async () => {
         try {
             await validateDateIfThereIsNoEndDate(legendPeriods.map(l => l.name), startDateForLegendSet, endDateForLegendSet)
-
-            // await validateIfIsAValideDate(legendPeriods.map(l => l.name), startDateForLegendSet, endDateForLegendSet)
 
             if (endDateForLegendSet && dayjs(startDateForLegendSet).isAfter(endDateForLegendSet))
                 throw new Error("The End Date must be gratter than Start Date !")
@@ -602,6 +605,7 @@ const LegendPage = ({
     const cancelFinishCreation = () => {
         setVisibleNewLegendForm(false)
         setCurrentLegend(null)
+        setCurrentLegendContent(null)
         setCurrentLegendItem(null)
         setCurrentLegendPeriod(null)
         setLegendItemList(null)
@@ -980,8 +984,6 @@ const LegendPage = ({
             setEndDateForLegendSet(null)
 
         } catch (err) {
-            console.log("err:", err)
-            // setNotif({ show: true, message: 'There are already a period set with no end date created. May be you can close the period set with no end date  before add this !', type: NOTIFICATON_CRITICAL })
             setNotif({ show: true, message: err.message, type: NOTIFICATON_CRITICAL })
             return setGenerateErrorMessage(err.message)
         }
@@ -1169,9 +1171,9 @@ const LegendPage = ({
                 setLegendDefaultNotApplicable(null)
                 setLegendItemList([])
 
-                setLegendPeriods(legendPeriods.filter(el => dayjs(el.name).format('YYYY') !== dayjs(name).format('YYYY')))
+                setLegendPeriods(legendPeriods.filter(el => el.name !== name))
 
-                setNotif({ show: true, message: "Period delete", type: NOTIFICATON_SUCCESS })
+                setNotif({ show: true, message: "Period deleted", type: NOTIFICATON_SUCCESS })
             }
         } catch (err) {
             setNotif({ show: true, message: err.message, type: NOTIFICATON_CRITICAL })
@@ -1284,6 +1286,11 @@ const LegendPage = ({
             </div>
             <hr />
             <div className='row p-2'>
+                {
+                    editLegend && currentLegend && loadingCurrentLegendContent && <div className='col-md-12 d-flex my-2'> <CircularLoader small /> <span className='ml-2'>Loading...</span></div>
+                }
+
+                {editLegend && currentLegend && !loadingCurrentLegendContent && !currentLegendContent && <div className='col-md-12'><NoticeBox warning>{`${currentLegend?.name} Content not found !`}</NoticeBox></div>}
                 {RenderPeriodLegendList()}
                 {currentLegendPeriod && !isLegendCloned && RenderLegendPeriodElementContent()}
             </div>
@@ -1292,7 +1299,6 @@ const LegendPage = ({
 
     return (
         <div className='mt-2'>
-            {console.log("Legend ", legendItemList)}
             {visibleNewLegendForm ? RenderNewLegendForm() : RenderLegendTable()}
             {RenderAddItemModal()}
             {RenderAddLegendPeriodModal()}

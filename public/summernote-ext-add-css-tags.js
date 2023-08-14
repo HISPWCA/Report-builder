@@ -76,7 +76,6 @@
                 var endElDisplay  = getComputedStyle(endEl, null).display;
 
                 if(startElDisplay !== 'inline' && endElDisplay !== 'inline') {
-                    console.log("Can't insert across two block elements.")
                     return true;
                 }
                 else {
@@ -103,7 +102,6 @@
                     return true;
                 }
                 else
-                    console.log("Unable to parse across so many nodes. Sorry!")
                     return false;
             };
 

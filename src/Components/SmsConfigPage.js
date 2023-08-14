@@ -102,7 +102,6 @@ const SmsConfigPage = ({
             setLoadingPrograms(false)
             setPrograms(programs)
         } catch (err) {
-            console.log(err)
             setLoadingPrograms(false)
         }
     }
@@ -205,7 +204,6 @@ const SmsConfigPage = ({
             setVisibleSaveModal(false)
             setNotif({ message: "SMS Template is created", show: true, type: NOTIFICATON_SUCCESS })
         } catch (err) {
-            console.log(err)
             setLoadingProcess(false)
             setNotif({ message: err.message, show: true, type: NOTIFICATON_CRITICAL })
         }

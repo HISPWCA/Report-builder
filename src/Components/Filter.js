@@ -18,6 +18,7 @@ import { ORGANISATION_UNITS_ROUTE, ORGANISATION_UNIT_LEVELS_ROUTE, ME_ROUTE, PRO
 import { AGGREGATE, DATA_ELEMENT, DAY, MONTH, PAGE_DESIGN, PAGE_REPORT, QUARTER, TRACKER, WEEK, YEAR } from "../utils/constants"
 import OrganisationUnitsTree from './OrganisationUnitsTree'
 import { DatePicker } from 'antd'
+import { loadDataStore } from '../utils/fonctions'
 
 
 const PeriodFieldType = ({ setState, state, setSelectedPeriod }) => {
@@ -57,6 +58,7 @@ const Filter = ({
     setLoadingOrganisations,
     selectedReport,
     setSelectedReport,
+    setSelectedReportContent,
     setCurrentOrgUnits,
     setExpandedKeys,
     expandedKeys,
@@ -81,7 +83,7 @@ const Filter = ({
     selectedPeriod,
     handleUpdateInformation,
     loadingGetDatas,
-    loadingLegends,
+    loadingLegendContents,
     setDataElementsFromHTML,
     reports,
     setSelectedPeriodType,
@@ -89,7 +91,9 @@ const Filter = ({
 }) => {
     const [visibleOrgUnit, setVisibleOrgUnit] = useState(false)
     const [programs, setPrograms] = useState([])
+
     const [loadingPrograms, setLoadingPrograms] = useState(false)
+    const [loadingReportContent, setLoadingReportContent] = useState(false)
 
 
     const loadOrgUnitLevels = async _ => {
@@ -216,47 +220,57 @@ const Filter = ({
     }
 
 
-    const handleSelectReport = ({ selected }) => {
-        setSelectedReport(selected)
-        const currentReport = reports.find(r => r.id === selected)
-        if (currentReport) {
+    const handleSelectReport = async ({ selected }) => {
+        try {
+            setLoadingReportContent(true)
+            setSelectedReport(selected)
+            const currentReport = reports.find(r => r.id === selected)
+            const currentReportContent = await loadDataStore(`REPORT_${currentReport?.id}`, null, null, {})
+            setSelectedReportContent(currentReportContent)
 
-            let parser = new DOMParser()
-            const doc = parser.parseFromString(currentReport.html, 'text/html')
-            const aggregateElement = doc.querySelectorAll("[data-type='AGGREGATE']")
-            const trackerElement = doc.querySelectorAll("[data-type='TRACKER']")
+            if (currentReport && currentReportContent) {
 
-            let dataTypes = []
-            if (aggregateElement.length > 0)
-                dataTypes.push({ id: AGGREGATE.value, name: AGGREGATE.name })
+                let parser = new DOMParser()
+                const doc = parser.parseFromString(currentReportContent.html, 'text/html')
+                const aggregateElement = doc.querySelectorAll("[data-type='AGGREGATE']")
+                const trackerElement = doc.querySelectorAll("[data-type='TRACKER']")
 
-            if (trackerElement.length > 0)
-                dataTypes.push({ id: TRACKER.value, name: TRACKER.name })
+                let dataTypes = []
+                if (aggregateElement.length > 0)
+                    dataTypes.push({ id: AGGREGATE.value, name: AGGREGATE.name })
 
-            if (dataTypes.length > 1) {
-                setDataTypesFromHTML(dataTypes)
-                setSelectedDataTypeFromHTML(null)
-                setSelectedProgramTrackerFromHTML(null)
-            }
+                if (trackerElement.length > 0)
+                    dataTypes.push({ id: TRACKER.value, name: TRACKER.name })
 
-            if (dataTypes.length === 1) {
-
-                if (dataTypes[0].id === AGGREGATE.value) {
-                    initAggregateFromHTML(currentReport)
-                    setSelectedDataTypeFromHTML(dataTypes[0].id)
-
-                    setDataTypesFromHTML([])
+                if (dataTypes.length > 1) {
+                    setDataTypesFromHTML(dataTypes)
+                    setSelectedDataTypeFromHTML(null)
                     setSelectedProgramTrackerFromHTML(null)
                 }
 
-                if (dataTypes[0].id === TRACKER.value) {
-                    setSelectedDataTypeFromHTML(dataTypes[0].id)
-                    initTrackerProgramsFromHTML(currentReport)
+                if (dataTypes.length === 1) {
 
-                    setDataTypesFromHTML([])
-                    setSelectedProgramTrackerFromHTML(null)
+                    if (dataTypes[0].id === AGGREGATE.value) {
+                        initAggregateFromHTML(currentReportContent)
+                        setSelectedDataTypeFromHTML(dataTypes[0].id)
+
+                        setDataTypesFromHTML([])
+                        setSelectedProgramTrackerFromHTML(null)
+                    }
+
+                    if (dataTypes[0].id === TRACKER.value) {
+                        setSelectedDataTypeFromHTML(dataTypes[0].id)
+                        initTrackerProgramsFromHTML(currentReportContent)
+
+                        setDataTypesFromHTML([])
+                        setSelectedProgramTrackerFromHTML(null)
+                    }
                 }
             }
+
+            setLoadingReportContent(false)
+        } catch (err) {
+            setLoadingReportContent(false)
         }
     }
 
@@ -424,7 +438,7 @@ const Filter = ({
                     primary
                     onClick={handleUpdateInformation}
                     disabled={selectedReport && selectedPeriod && currentOrgUnits.length > 0 ? false : true}
-                    loading={loadingGetDatas || loadingLegends}
+                    loading={loadingGetDatas || loadingLegendContents}
                 >
                     Update report
                 </Button>
@@ -447,50 +461,71 @@ const Filter = ({
         }
     }
 
-    const RenderReportFilter = loadingPrograms || orgUnits.length == 0 ?
-        <div className='mt-2'> <CircularLoader small label="Loading..." /> </div> : (
-            <div>
-                <div className='mt-2'>
-                    <Field label="Which report ?">
-                        <SingleSelect
-                            placeholder='Reports'
-                            selected={selectedReport}
-                            onChange={handleSelectReport}
-                        >
-                            {isDataStoreReportsCreated && reports?.map(report => (
-                                <SingleSelectOption label={report.name} value={report.id} />
-                            ))}
-
-                            {isDataStoreReportsCreated && reports?.length === 0 && <SingleSelectOption label="No Report" />}
-                        </SingleSelect>
-                    </Field>
-                </div>
-
-                {dataTypesFromHTML.length > 0 && (
-                    <div className='mt-2'>
-                        <div className='my-2'>
-                            <NoticeBox title="Report">As your report contains tracker and aggregate data , you must generate your report by selecting data type one by one</NoticeBox>
+    const RenderReportFilter = () => (
+        <>
+            {console.log("loading programms: ", loadingPrograms)}
+            {console.log("org unit : ", orgUnits)}
+            {console.log("loading legends:  ", loadingLegendContents)}
+            {
+                loadingPrograms || orgUnits.length === 0 || loadingLegendContents ?
+                    (
+                        <div className='mt-2'>
+                            <CircularLoader small /> <span style={{ marginLeft: '5px' }}>Loading...</span>
                         </div>
-                        <Field label="Data Type">
-                            <SingleSelect
-                                placeholder='Reports'
-                                selected={selectedDataTypeFromHTML}
-                                onChange={handleSelectDataTypeFromHTML}
-                            >
-                                {dataTypesFromHTML.map(dataType => (
-                                    <SingleSelectOption label={dataType.name} value={dataType.id} />
-                                ))}
-                            </SingleSelect>
-                        </Field>
-                    </div>
-                )}
+                    ) : (
+                        <div>
+                            <div className='mt-2'>
+                                <Field label="Which report ?">
+                                    <SingleSelect
+                                        placeholder='Reports'
+                                        selected={selectedReport}
+                                        onChange={handleSelectReport}
+                                    >
+                                        {isDataStoreReportsCreated && reports?.map(report => (
+                                            <SingleSelectOption label={report.name} value={report.id} />
+                                        ))}
 
-                {selectedDataTypeFromHTML === TRACKER.value && TrackerDataTypeContent()}
-                {selectedDataTypeFromHTML === AGGREGATE.value && AggregateDataTypeContent()}
+                                        {isDataStoreReportsCreated && reports?.length === 0 && <SingleSelectOption label="No Report" />}
+                                    </SingleSelect>
+                                </Field>
+                            </div>
+                            {
+                                loadingReportContent && (
+                                    <div className='d-flex align-items-center mt-2'>
+                                        <div> <CircularLoader small /> </div>
+                                        <div className='ml-3'> Loading...</div>
+                                    </div>
+                                )
+                            }
 
-                {OrganisationUnitModal()}
-            </div>
-        )
+                            {dataTypesFromHTML.length > 0 && (
+                                <div className='mt-2'>
+                                    <div className='my-2'>
+                                        <NoticeBox title="Report">As your report contains tracker and aggregate data , you must generate your report by selecting data type one by one</NoticeBox>
+                                    </div>
+                                    <Field label="Data Type">
+                                        <SingleSelect
+                                            placeholder='Reports'
+                                            selected={selectedDataTypeFromHTML}
+                                            onChange={handleSelectDataTypeFromHTML}
+                                        >
+                                            {dataTypesFromHTML.map(dataType => (
+                                                <SingleSelectOption label={dataType.name} value={dataType.id} />
+                                            ))}
+                                        </SingleSelect>
+                                    </Field>
+                                </div>
+                            )}
+
+                            {selectedDataTypeFromHTML === TRACKER.value && TrackerDataTypeContent()}
+                            {selectedDataTypeFromHTML === AGGREGATE.value && AggregateDataTypeContent()}
+
+                            {OrganisationUnitModal()}
+                        </div>
+                    )
+            }
+        </>
+    )
 
 
     const RenderDesignFilter = () => <div className='mt-2'>
@@ -510,7 +545,7 @@ const Filter = ({
             return RenderDesignFilter()
 
         case PAGE_REPORT:
-            return RenderReportFilter
+            return RenderReportFilter()
 
         default:
             return (

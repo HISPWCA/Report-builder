@@ -1,8 +1,8 @@
 const config = {
     type: 'app',
     name: "report-builder",
-    title: "Report builder",
-    description: "Report builder app ",
+    title: "report-builder",
+    description: "Report Builder App",
     entryPoints: {
         app: './src/App.js',
     },
