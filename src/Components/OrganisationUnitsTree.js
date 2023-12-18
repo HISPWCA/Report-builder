@@ -232,15 +232,4 @@ const OrganisationUnitsTree = ({
   )
 }
 
-{/* <Tree
-                  selectable
-                  expandedKeys={expandedKeys.length > 0 ? expandedKeys : tree.length > 0 ? [tree[0].id] : []}
-                  onSelect={(value) => setCurrentOrgUnits(value.map(id => orgUnits.find(ou => ou.id === id)))}
-                  onExpand={(value) => {
-                    setExpandedKeys(value)
-                  }}
-                  treeData={tree}
-                  autoExpandParent={autoExpandParent}
-                /> */}
-
 export default OrganisationUnitsTree

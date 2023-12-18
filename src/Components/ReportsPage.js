@@ -192,7 +192,7 @@ const ReportsPage = ({
 
 
     useEffect(() => {
-        if (selectedReport ) {
+        if (selectedReport) {
 
             const aggregateElement = document.body.querySelectorAll("[data-type=" + AGGREGATE.value + "]")
             const trackerElements = document.body.querySelectorAll("[data-type=" + TRACKER.value + "]")
@@ -222,38 +222,39 @@ const ReportsPage = ({
             }
 
         }
-    }, [selectedReport ])
+    }, [selectedReport])
 
 
     return (
         <div>
-            <div className="bg-white py-2 d-flex align-items-center justify-content-center my-shadow" style={{ position: 'sticky', top: '0px', zIndex:100 }}>
+            <div className="bg-white py-2 d-flex align-items-center justify-content-center my-shadow" style={{ position: 'sticky', top: '0px', zIndex: 100 }}>
                 <div className="mr-2">
                     <TbReport style={{ fontSize: "50px", color: "#06695C" }} />
                 </div>
                 <div style={{ fontSize: "24px" }} className='font-weight-bold'>Report Builder</div>
             </div>
             <div style={{ padding: '10px' }}>
-                {selectedReport  && searchProperties && searchByAttribute && (
-                    <div className='d-flex align-items-center justify-content-center mt-2'>
-                        <div>Search by properties : </div>
-                        {searchProperties.map((p, index) => (
-                            <Input className="ml-2" placeholder={p.trackedEntityAttribute?.name} value={p.value} onChange={({ value }) => handleSearchInput(value, index)} />
-                        ))}
-                        <Button className="ml-2" loading={loadingTeiProcess} disabled={currentOrgUnits.length > 0 ? false : true} onClick={() => queryTeiList()}>Search</Button>
-                    </div>
-                )
+                {
+                    selectedReport && searchProperties && searchByAttribute && (
+                        <div className='d-flex align-items-center justify-content-center mt-2'>
+                            <div>Search by properties : </div>
+                            {searchProperties.map((p, index) => (
+                                <Input className="ml-2" placeholder={p.trackedEntityAttribute?.name} value={p.value} onChange={({ value }) => handleSearchInput(value, index)} />
+                            ))}
+                            <Button className="ml-2" loading={loadingTeiProcess} disabled={currentOrgUnits.length > 0 ? false : true} onClick={() => queryTeiList()}>Search</Button>
+                        </div>
+                    )
                 }
 
                 {
-                    selectedReport  && <div className='mt-2 d-flex justify-content-center align-items-center'>
+                    selectedReport && <div className='mt-2 d-flex justify-content-center align-items-center'>
                         <Button primary onClick={printReportAsPDF}>Print report</Button>
                         {selectedTEI && <Button className="ml-2" loading={loadingSendSMS} onClick={() => setVisibleSendSMSModal(true)}>Send SMS</Button>}
                     </div>
                 }
 
                 {
-                    selectedReport  ? (
+                    selectedReport ? (
                         <div style={{ margin: '0px auto' }}>
                             <div className='mt-1' id="my-table-container" style={{ fontSize: "12px", maxWidth: "900px", margin: "0px auto" }} dangerouslySetInnerHTML={{ __html: selectedReport.html || "" }} />
                         </div>

@@ -5,7 +5,7 @@ export const API_BASE_ROUTE = FULL_ROUTE.substring(0, FULL_ROUTE.indexOf('/apps/
 export const SERVER_URL = FULL_ROUTE.substring(0, FULL_ROUTE.indexOf('/api/apps/'.concat(APP_NAME)))
 export const ORGANISATION_UNITS_ROUTE = API_BASE_ROUTE.concat('/organisationUnits.json?paging=false&fields=id,name,displayName,parent,level')
 export const SUPERVISORS_ROUTE = API_BASE_ROUTE.concat('/users.json')
-export const ME_ROUTE = API_BASE_ROUTE.concat('/me.json?fields=id,displayName,name,authorities')
+export const ME_ROUTE = API_BASE_ROUTE.concat('/me.json?fields=id,displayName,name,authorities,userGroups')
 export const ME_SETTINGS_ROUTE = API_BASE_ROUTE.concat('/systemSettings.json')
 export const ORGANISATION_UNIT_GROUP_ROUTE = API_BASE_ROUTE.concat('/organisationUnitGroups.json?paging=false')
 export const PERIOD_TYPE_ROUTE = API_BASE_ROUTE.concat('/periodTypes.json?paging=false')

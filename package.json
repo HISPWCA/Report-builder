@@ -1,15 +1,16 @@
 {
   "name": "report-builder",
-  "version": "1.0.0",
+  "version": "1.9.9",
   "description": "",
   "license": "BSD-3-Clause",
   "private": true,
   "scripts": {
-    "build": "d2-app-scripts build",
     "start": "d2-app-scripts start",
     "test": "d2-app-scripts test",
     "deploy": "d2-app-scripts deploy",
-    "prod": "sudo rm -r .d2 build && yarn build"
+    "build": "d2-app-scripts build && yarn manifest && cd build && cp -r manifest.webapp app && cd app && zip -r ../../report-builder.zip * && cd ../../ && rm -r build && mkdir build && mv report-builder.zip build && clear",
+    "prod": "yarn build",
+    "manifest": "d2-manifest package.json build/manifest.webapp"
   },
   "devDependencies": {
     "@dhis2/cli-app-scripts": "^9.0.1"
@@ -22,11 +23,25 @@
     "@dhis2/ui": "^8.4.5",
     "@nextui-org/react": "^1.0.0-beta.10",
     "antd": "^5.6.4",
+    "axios": "^1.5.0",
+    "d2-manifest": "^1.0.0",
     "dayjs": "^1.11.9",
     "proptypes": "^1.1.0",
     "react-color": "^2.19.3",
     "react-custom-scrollbars-2": "^4.5.0",
     "react-icons": "^4.4.0",
     "uuid": "^8.3.2"
+  },
+  "manifest.webapp": {
+    "name": "report-builder",
+    "description": "Report Builder App",
+    "version": "1.9.9",
+    "developer": {
+      "url": "https://hispwca.org",
+      "name": "HISP West & Central Africa ( HWCA) "
+    },
+    "icons": {
+      "48": "dhis2-app-icon.png"
+    }
   }
 }

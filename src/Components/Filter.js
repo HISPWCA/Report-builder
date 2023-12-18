@@ -38,8 +38,6 @@ const PeriodFieldType = ({ setState, state, setSelectedPeriod }) => {
                 <SingleSelectOption label="Daily" value={DAY} />
                 <SingleSelectOption label="Monthly" value={MONTH} />
                 <SingleSelectOption label="Yearly" value={YEAR} />
-                {/* <SingleSelectOption label="Quarterly" value={QUARTER} />
-                <SingleSelectOption label="Weekly" value={WEEK} /> */}
             </SingleSelect>
         </Field>
     )
@@ -88,6 +86,8 @@ const Filter = ({
     reports,
     setSelectedPeriodType,
     selectedPeriodType,
+    legendContents,
+    legends
 }) => {
     const [visibleOrgUnit, setVisibleOrgUnit] = useState(false)
     const [programs, setPrograms] = useState([])
@@ -461,16 +461,17 @@ const Filter = ({
         }
     }
 
+    const calculatePercentage = (value, total) => {
+        return Math.round(parseInt(value * 100) / total) || 0
+    }
+
     const RenderReportFilter = () => (
         <>
-            {console.log("loading programms: ", loadingPrograms)}
-            {console.log("org unit : ", orgUnits)}
-            {console.log("loading legends:  ", loadingLegendContents)}
             {
                 loadingPrograms || orgUnits.length === 0 || loadingLegendContents ?
                     (
-                        <div className='mt-2'>
-                            <CircularLoader small /> <span style={{ marginLeft: '5px' }}>Loading...</span>
+                        <div className='mt-2' style={{ display: 'flex', alignItems: 'center' }}>
+                            <CircularLoader small /> <span style={{ marginLeft: '5px' }}>Loading... <span style={{ marginLeft: '5px', color: '#00000090' }}> {calculatePercentage(legendContents.length || 0, legends.length || 0)} %</span></span>
                         </div>
                     ) : (
                         <div>
@@ -498,41 +499,40 @@ const Filter = ({
                                 )
                             }
 
-                            {dataTypesFromHTML.length > 0 && (
-                                <div className='mt-2'>
-                                    <div className='my-2'>
-                                        <NoticeBox title="Report">As your report contains tracker and aggregate data , you must generate your report by selecting data type one by one</NoticeBox>
+                            {
+                                dataTypesFromHTML.length > 0 && (
+                                    <div className='mt-2'>
+                                        <div className='my-2'>
+                                            <NoticeBox title="Report">As your report contains tracker and aggregate data , you must generate your report by selecting data type one by one</NoticeBox>
+                                        </div>
+                                        <Field label="Data Type">
+                                            <SingleSelect
+                                                placeholder='Reports'
+                                                selected={selectedDataTypeFromHTML}
+                                                onChange={handleSelectDataTypeFromHTML}
+                                            >
+                                                {dataTypesFromHTML.map(dataType => (
+                                                    <SingleSelectOption label={dataType.name} value={dataType.id} />
+                                                ))}
+                                            </SingleSelect>
+                                        </Field>
                                     </div>
-                                    <Field label="Data Type">
-                                        <SingleSelect
-                                            placeholder='Reports'
-                                            selected={selectedDataTypeFromHTML}
-                                            onChange={handleSelectDataTypeFromHTML}
-                                        >
-                                            {dataTypesFromHTML.map(dataType => (
-                                                <SingleSelectOption label={dataType.name} value={dataType.id} />
-                                            ))}
-                                        </SingleSelect>
-                                    </Field>
-                                </div>
-                            )}
+                                )
+                            }
 
                             {selectedDataTypeFromHTML === TRACKER.value && TrackerDataTypeContent()}
                             {selectedDataTypeFromHTML === AGGREGATE.value && AggregateDataTypeContent()}
 
                             {OrganisationUnitModal()}
+
+                        
                         </div>
                     )
             }
         </>
     )
 
-
-    const RenderDesignFilter = () => <div className='mt-2'>
-
-
-    </div>
-
+    const RenderDesignFilter = () => <div className='mt-2'></div>
 
     useEffect(() => {
         loadOrgUnitLevels()

@@ -186,7 +186,8 @@ const LegendPage = ({
             if (id) {
                 setCurrentLegendIdToDelete(id)
                 setLoadingProcess(true)
-                const newPayload = legends.filter(r => r.id !== id)
+                const refreshLegendList = await loadDataStore(process.env.REACT_APP_LEGENDS_KEY, null, null, [])
+                const newPayload = refreshLegendList.filter(r => r.id !== id)
 
                 await saveDataToDataStore(process.env.REACT_APP_LEGENDS_KEY, newPayload, null)
                 await deleteKeyFromDataStore(`LEGEND_${id}`)
@@ -262,14 +263,24 @@ const LegendPage = ({
             if (!legendName || legendName?.length === 0)
                 return setGenerateErrorMessage('The legend name is required')
 
-
             let payload = {}
             let payloadLegendContent = {}
 
-            if (editLegend && currentLegend && currentLegendContent) {
-                payload = legends.map(leg => leg.id === currentLegend.id ? ({ ...leg, name: legendName, updatedAt: dayjs() }) : leg)
+            const refreshLegendList = await loadDataStore(process.env.REACT_APP_LEGENDS_KEY, null, null, [])
+
+            if (editLegend && currentLegend && refreshLegendList) {
+
+                payload = refreshLegendList.map(leg => leg.id === currentLegend.id ? ({ ...leg, name: legendName, updatedAt: dayjs() }) : leg)
+
+
+                const refreshCurrentLegendContent = await loadDataStore(`LEGEND_${currentLegend.id}`, null, null, {})
+                console.log("refreshCurrentLegendContent: ", refreshCurrentLegendContent)
+
+                if (!refreshCurrentLegendContent)
+                    throw new Error(currentLegend.name + " Content not found !")
+
                 payloadLegendContent = {
-                    ...currentLegendContent,
+                    ...refreshCurrentLegendContent,
                     name: legendName,
                     periods: legendPeriods.length > 0 ?
                         legendPeriods.reduce((prev, current) => {
@@ -279,8 +290,9 @@ const LegendPage = ({
                         : null,
                     updatedAt: dayjs()
                 }
+
             } else {
-                if (legends.map(l => l.name).includes(legendName))
+                if (refreshLegendList.map(l => l.name).includes(legendName))
                     throw new Error("Legend already exist !")
 
                 const legendId = uuid()
@@ -292,7 +304,7 @@ const LegendPage = ({
                         createdAt: dayjs(),
                         updatedAt: dayjs(),
                     },
-                    ...legends
+                    ...refreshLegendList
                 ]
 
                 payloadLegendContent = {
@@ -321,6 +333,7 @@ const LegendPage = ({
             setCurrentLegendItem(null)
             setCurrentLegendPeriod(null)
             setLegendItemList([])
+            setLegendPeriods([])
             setVisibleFinishCreateLegend(false)
             setNotif({ show: true, message: "Legend saved !", type: NOTIFICATON_SUCCESS })
             setLoadingProcess(false)
@@ -603,12 +616,12 @@ const LegendPage = ({
     )
 
     const cancelFinishCreation = () => {
-        setVisibleNewLegendForm(false)
-        setCurrentLegend(null)
-        setCurrentLegendContent(null)
-        setCurrentLegendItem(null)
-        setCurrentLegendPeriod(null)
-        setLegendItemList(null)
+        // setVisibleNewLegendForm(false)
+        // setCurrentLegend(null)
+        // setCurrentLegendContent(null)
+        // setCurrentLegendItem(null)
+        // setCurrentLegendPeriod(null)
+        // setLegendItemList(null)
         setVisibleFinishCreateLegend(false)
     }
 
@@ -625,7 +638,7 @@ const LegendPage = ({
             <ModalActions>
                 <ButtonStrip end>
                     <Button small onClick={cancelFinishCreation} destructive> Cancel </Button>
-                    <Button small loading={loadingProcess} disable={loadingProcess} primary onClick={handleSaveLegend}>Save legend</Button>
+                    <Button small loading={loadingProcess} disable={loadingProcess || !legendName} primary onClick={handleSaveLegend}>Save legend</Button>
                 </ButtonStrip>
             </ModalActions>
         </Modal>
@@ -1035,19 +1048,9 @@ const LegendPage = ({
 
 
     const handleCancelLegendPeriodModification = () => {
-        setCurrentLegendPeriod(null)
         setGenerateErrorMessage(null)
-        setMin(null)
-        setMax(null)
-        setIntervalSpace(null)
-        setLegendItemList([])
-        setLegendDefaultMissingData(null)
-        setLegendDefaultNotApplicable(null)
-        setLegendDefaultType(IMAGE)
         setIsLegendCloned(false)
         setVisibleSaveLegendPeriodPopup(false)
-        setStartDateForLegendSet(null)
-        setEndDateForLegendSet(null)
     }
 
     const RenderNewLegendGroupForm = () => (

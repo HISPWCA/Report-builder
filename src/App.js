@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import DesignsPage from './Components/DesignsPage'
 import ReportsPage from './Components/ReportsPage'
-import { ANALYTICS_ROUTE, ME_ROUTE, TEIS_ROUTE, ORGANISATION_UNIT_GROUP_ROUTE } from './api.routes'
+import { ANALYTICS_ROUTE, ME_ROUTE, TEIS_ROUTE, ORGANISATION_UNIT_GROUP_ROUTE, USER_GROUPS_ROUTE } from './api.routes'
 import { Button, CircularLoader }
     from '@dhis2/ui'
 import Filter from './Components/Filter'
@@ -16,7 +16,7 @@ import { TbReportSearch } from 'react-icons/tb'
 import { LuClipboardEdit } from 'react-icons/lu'
 import { GrDocumentConfig } from 'react-icons/gr'
 import { BiMessageDetail } from 'react-icons/bi'
-// import 'antd/dist/antd.css'
+import axios from 'axios'
 import 'antd/dist/reset.css'
 import './App.css'
 
@@ -44,19 +44,15 @@ const App = () => {
     const [selectedOrgUnits, setSelectedOrgUnits] = useState([])
     const [selectedProgram, setSelectedProgram] = useState(null)
 
-
     const [selectedPeriod, setSelectedPeriod] = useState(null)
     const [searchProperties, setSearchProperties] = useState([])
 
     const [loadingOrganisationUnits, setLoadingOrganisations] = useState(false)
-    const [loadingOrganisationUnitGroups, setLoadingOrganisationUnitGroups] = useState(false)
     const [loadingGetDatas, setLoadingGetDatas] = useState(false)
-    const [loadingDataStoreReports, setLoadingDataStoreReports] = useState([])
     const [loadingSendDatas, setLoadingSendDatas] = useState(false)
     const [loadingDataStoreInitialization, setLoadingDataStoreInitialization] = useState(false)
     const [loadingSmsConfigs, setLoadingSmsConfigs] = useState(false)
     const [loadingReports, setLoadingReports] = useState(false)
-    const [loadingLegends, setLoadingLegends] = useState(false)
     const [loadingLegendContents, setLoadingLegendContents] = useState(false)
 
     const [visibleListTei, setVisibleListTei] = useState(false)
@@ -78,11 +74,12 @@ const App = () => {
     const [visiblePeriodComponent, setVisiblePeriodComponent] = useState(false)
 
     const [selectedPeriods, setSelectedPeriods] = useState([])
+    const [appUserGroup, setAppUserGroup] = useState([])
 
     const initDataStore = async () => {
         try {
             setLoadingDataStoreInitialization(true)
-            const legs = await loadDataStore(process.env.REACT_APP_LEGENDS_KEY, setLoadingLegends, setLegends, [])
+            const legs = await loadDataStore(process.env.REACT_APP_LEGENDS_KEY, null, setLegends, [])
             loadDataStore(process.env.REACT_APP_REPORTS_KEY, setLoadingReports, setReports, [])
             loadDataStore(process.env.REACT_APP_SMS_CONFIG_KEY, setLoadingSmsConfigs, setSmsConfigs, [])
 
@@ -99,28 +96,45 @@ const App = () => {
         }
     }
 
+    const initAppUserGroup = async () => {
+        try {
+            const existedGroup = await axios.get(`${USER_GROUPS_ROUTE}&fields=id&filter=name:eq:${process.env.REACT_APP_USER_GROUP}`)
+            if (existedGroup.data.userGroups.length === 0) {
+                await axios.post(`${USER_GROUPS_ROUTE}`, { name: process.env.REACT_APP_USER_GROUP })
+                const createdUserGroup = await axios.get(`${USER_GROUPS_ROUTE}&fields=id&filter=name:eq:${process.env.REACT_APP_USER_GROUP}`)
+
+                if (createdUserGroup.data.userGroups.length === 0) {
+                    throw new Error("Impossible de créer le group utilisateur")
+                }
+                setAppUserGroup(createdUserGroup.data.userGroups[0])
+            } else {
+                setAppUserGroup(existedGroup.data.userGroups[0])
+            }
+        } catch (err) {
+            setNotif({ show: true, message: err.response?.data?.message || err.message, type: NOTIFICATON_CRITICAL })
+        }
+    }
+
     const loadLegendContents = async (legendList) => {
         try {
             setLoadingLegendContents(true)
-            let count = 1
             let list = []
             legendList.forEach(async leg => {
                 const content = await loadDataStore(`LEGEND_${leg.id}`, null, null, {})
 
-                count = count + 1
                 list = [...list, content]
-                if (count === legendList.length) {
-                    setLegendContents(list)
+                setLegendContents(list)
+                if (legendList.length === list.length) {
                     setLoadingLegendContents(false)
                 }
             })
-            setLoadingLegendContents(false)
+            legendList.length === 0 && setLoadingLegendContents(false)
+
         } catch (err) {
             setLoadingLegendContents(false)
             throw err
         }
     }
-
 
     const handleUpdateInformation = async () => {
         try {
@@ -164,7 +178,6 @@ const App = () => {
             handleUpdateOtherElement()
             setLoadingGetDatas(false)
         } catch (err) {
-            console.log(err)
             setLoadingGetDatas(false)
         }
     }
@@ -192,10 +205,8 @@ const App = () => {
             })
     }
 
-
     const loadOrganisationUnitGroups = async _ => {
         try {
-            setLoadingOrganisationUnitGroups(true)
             const request = await fetch(ORGANISATION_UNIT_GROUP_ROUTE.concat('&fields=id,name,displayName,organisationUnits'))
 
             const response = await request.json()
@@ -204,14 +215,10 @@ const App = () => {
                 throw response
 
             setOrganisationUnitGroups(response.organisationUnitGroups)
-            setLoadingOrganisationUnitGroups(false)
         } catch (error) {
-            setLoadingOrganisationUnitGroups(false)
             setNotif({ message: error.message, type: NOTIFICATON_CRITICAL, show: true })
         }
     }
-
-
 
     const handleDesignPage = () => {
         setRenderPage(PAGE_DESIGN)
@@ -264,7 +271,6 @@ const App = () => {
                 route = route.concat('&')
                     .concat('pageSize=10&page=1&pageSize=10&totalPages=false')
 
-
                 const request = await fetch(route)
                 const response = await request.json()
                 if (response.status === "ERROR")
@@ -281,90 +287,113 @@ const App = () => {
         }
     }
 
+    const isAuthorised = () => {
+        if (me) {
+            if (me.authorities?.includes("ALL"))
+                return true
+
+            if (me.userGroups?.map(uGrp => uGrp.id)?.includes(appUserGroup?.id))
+                return true
+        }
+        return false
+    }
+
     const RenderContent = () => me && (
         <div className='row' style={{ width: '100%', minHeight: '95vh' }}>
             <div className='col-md-2' style={{ borderRight: '1px solid #ccc' }}>
-                <div className='py-2 px-3 ' style={{ position: 'sticky', top: '0px' }}>
-                    {
-                        me.authorities.includes("ALL") && (
-                            <>
-                                <div onClick={() => handleReportPage()} style={{ display: 'flex', alignItems: 'center' }} className={'my-menu'.concat(renderPage === PAGE_REPORT ? ' current' : '')}>
-                                    <span><TbReportSearch style={{ fontSize: '20px' }} /></span>
-                                    <span style={{ marginLeft: '10px' }}>Reports</span>
-                                </div>
-                                <div onClick={() => handleDesignPage()} style={{ display: 'flex', alignItems: 'center' }} className={'my-menu'.concat(renderPage === PAGE_DESIGN ? ' current' : '')}>
-                                    <span><LuClipboardEdit style={{ fontSize: '20px' }} /></span>
-                                    <span style={{ marginLeft: '10px' }}>Design</span>
-                                </div>
-                                <div onClick={() => handleLegendPage()} style={{ display: 'flex', alignItems: 'center' }} className={'my-menu'.concat(renderPage === PAGE_LEGEND ? ' current' : '')}>
-                                    <span><GrDocumentConfig style={{ fontSize: '20px' }} /></span>
-                                    <span style={{ marginLeft: '10px' }}>Legend</span>
-                                </div>
-                                <div onClick={() => handleSmsConfigPage()} style={{ display: 'flex', alignItems: 'center' }} className={'my-menu'.concat(renderPage === PAGE_SMS_CONFIG ? ' current' : '')}>
-                                    <span><BiMessageDetail style={{ fontSize: '20px' }} /></span>
-                                    <span style={{ marginLeft: '10px' }}> SMS Config</span>
-                                </div>
-                                <hr className='text-black' />
-                            </>
-                        )}
+                <div style={{ position: 'relative', height: '100%' }}>
+                    <div className='py-2 px-3' style={{ position: 'sticky', top: '0px' }}>
 
-                    <Filter
-                        currentOrgUnits={currentOrgUnits}
-                        dataType={dataType}
-                        expandedKeys={expandedKeys}
-                        handleUpdateInformation={handleUpdateInformation}
-                        isDataStoreReportsCreated={isDataStoreReportsCreated}
-                        loadingGetDatas={loadingGetDatas}
-                        loadingOrganisationUnits={loadingOrganisationUnits}
-                        meOrgUnitId={meOrgUnitId}
-                        minLevel={minLevel}
-                        orgUnits={orgUnits}
-                        renderPage={renderPage}
-                        selectedOrgUnits={selectedOrgUnits}
-                        selectedPeriod={selectedPeriod}
-                        selectedReport={selectedReport}
-                        selectedReportContent={selectedReportContent}
-                        setSelectedReportContent={setSelectedReportContent}
-                        setCurrentOrgUnits={setCurrentOrgUnits}
-                        setDataType={setDataType}
-                        setExpandedKeys={setExpandedKeys}
-                        setLoadingOrganisations={setLoadingOrganisations}
-                        setMaxLevel={setMaxLevel}
-                        setMeOrgUnitId={setMeOrgUnitId}
-                        setMinLevel={setMinLevel}
-                        setOrgUnitLevels={setOrgUnitLevels}
-                        setOrgUnits={setOrgUnits}
-                        setSelectedOrgUnits={setSelectedOrgUnits}
-                        setSelectedPeriod={setSelectedPeriod}
-                        setSelectedReport={setSelectedReport}
-                        setSelectedProgram={setSelectedProgram}
-                        selectedProgram={selectedProgram}
-                        me={me}
-                        setSelectedTEI={setSelectedTEI}
-                        loadingLegendContents={loadingLegendContents}
-                        searchProperties={searchProperties}
-                        setSearchProperties={setSearchProperties}
-                        dataTypesFromHTML={dataTypesFromHTML}
-                        setDataTypesFromHTML={setDataTypesFromHTML}
-                        selectedDataTypeFromHTML={selectedDataTypeFromHTML}
-                        setSelectedDataTypeFromHTML={setSelectedDataTypeFromHTML}
-                        programTrackersFromHTML={programTrackersFromHTML}
-                        setProgramTrackersFromHTML={setProgramTrackersFromHTML}
-                        selectedProgramTrackerFromHTML={selectedProgramTrackerFromHTML}
-                        setSelectedProgramTrackerFromHTML={setSelectedProgramTrackerFromHTML}
-                        searchByAttribute={searchByAttribute}
-                        setSearchByAttribute={setSearchByAttribute}
-                        queryTeiList={queryTeiList}
-                        loadingQueryTeiList={loadingQueryTeiList}
-                        dataElementsFromHTML={dataElementsFromHTML}
-                        setDataElementsFromHTML={setDataElementsFromHTML}
-                        reports={reports}
-                        setVisiblePeriodComponent={setVisiblePeriodComponent}
-                        setSelectedPeriodType={setSelectedPeriodType}
-                        selectedPeriodType={selectedPeriodType}
-                        visiblePeriodComponent={visiblePeriodComponent}
-                        setSelectedPeriods={setSelectedPeriods}
-                    />
+                        {
+                            isAuthorised() && (
+                                <>
+                                    <div onClick={() => handleReportPage()} style={{ display: 'flex', alignItems: 'center' }} className={'my-menu'.concat(renderPage === PAGE_REPORT ? ' current' : '')}>
+                                        <span><TbReportSearch style={{ fontSize: '20px' }} /></span>
+                                        <span style={{ marginLeft: '10px' }}>Reports</span>
+                                    </div>
+                                    <div onClick={() => handleDesignPage()} style={{ display: 'flex', alignItems: 'center' }} className={'my-menu'.concat(renderPage === PAGE_DESIGN ? ' current' : '')}>
+                                        <span><LuClipboardEdit style={{ fontSize: '20px' }} /></span>
+                                        <span style={{ marginLeft: '10px' }}>Design</span>
+                                    </div>
+                                    <div onClick={() => handleLegendPage()} style={{ display: 'flex', alignItems: 'center' }} className={'my-menu'.concat(renderPage === PAGE_LEGEND ? ' current' : '')}>
+                                        <span><GrDocumentConfig style={{ fontSize: '20px' }} /></span>
+                                        <span style={{ marginLeft: '10px' }}>Legend</span>
+                                    </div>
+                                    <div onClick={() => handleSmsConfigPage()} style={{ display: 'flex', alignItems: 'center' }} className={'my-menu'.concat(renderPage === PAGE_SMS_CONFIG ? ' current' : '')}>
+                                        <span><BiMessageDetail style={{ fontSize: '20px' }} /></span>
+                                        <span style={{ marginLeft: '10px' }}> SMS Config</span>
+                                    </div>
+                                    <hr className='text-black' />
+                                </>
+                            )}
+
+                        <Filter
+                            currentOrgUnits={currentOrgUnits}
+                            dataType={dataType}
+                            expandedKeys={expandedKeys}
+                            handleUpdateInformation={handleUpdateInformation}
+                            isDataStoreReportsCreated={isDataStoreReportsCreated}
+                            loadingGetDatas={loadingGetDatas}
+                            loadingOrganisationUnits={loadingOrganisationUnits}
+                            meOrgUnitId={meOrgUnitId}
+                            minLevel={minLevel}
+                            orgUnits={orgUnits}
+                            renderPage={renderPage}
+                            selectedOrgUnits={selectedOrgUnits}
+                            selectedPeriod={selectedPeriod}
+                            selectedReport={selectedReport}
+                            selectedReportContent={selectedReportContent}
+                            setSelectedReportContent={setSelectedReportContent}
+                            setCurrentOrgUnits={setCurrentOrgUnits}
+                            setDataType={setDataType}
+                            setExpandedKeys={setExpandedKeys}
+                            setLoadingOrganisations={setLoadingOrganisations}
+                            setMaxLevel={setMaxLevel}
+                            setMeOrgUnitId={setMeOrgUnitId}
+                            setMinLevel={setMinLevel}
+                            setOrgUnitLevels={setOrgUnitLevels}
+                            setOrgUnits={setOrgUnits}
+                            setSelectedOrgUnits={setSelectedOrgUnits}
+                            setSelectedPeriod={setSelectedPeriod}
+                            setSelectedReport={setSelectedReport}
+                            setSelectedProgram={setSelectedProgram}
+                            selectedProgram={selectedProgram}
+                            me={me}
+                            setSelectedTEI={setSelectedTEI}
+                            loadingLegendContents={loadingLegendContents}
+                            searchProperties={searchProperties}
+                            setSearchProperties={setSearchProperties}
+                            dataTypesFromHTML={dataTypesFromHTML}
+                            setDataTypesFromHTML={setDataTypesFromHTML}
+                            selectedDataTypeFromHTML={selectedDataTypeFromHTML}
+                            setSelectedDataTypeFromHTML={setSelectedDataTypeFromHTML}
+                            programTrackersFromHTML={programTrackersFromHTML}
+                            setProgramTrackersFromHTML={setProgramTrackersFromHTML}
+                            selectedProgramTrackerFromHTML={selectedProgramTrackerFromHTML}
+                            setSelectedProgramTrackerFromHTML={setSelectedProgramTrackerFromHTML}
+                            searchByAttribute={searchByAttribute}
+                            setSearchByAttribute={setSearchByAttribute}
+                            queryTeiList={queryTeiList}
+                            loadingQueryTeiList={loadingQueryTeiList}
+                            dataElementsFromHTML={dataElementsFromHTML}
+                            setDataElementsFromHTML={setDataElementsFromHTML}
+                            reports={reports}
+                            setVisiblePeriodComponent={setVisiblePeriodComponent}
+                            setSelectedPeriodType={setSelectedPeriodType}
+                            selectedPeriodType={selectedPeriodType}
+                            visiblePeriodComponent={visiblePeriodComponent}
+                            setSelectedPeriods={setSelectedPeriods}
+                            legendContents={legendContents}
+                            legends={legends}
+                        />
+
+                    </div>
+
+                    <div style={{ position: 'absolute', bottom: 10, left: 0, textAlign: 'center', width: '100%' }}>
+                        <div style={{ fontSize: '10px', color: '#00000050' }}>HWCA / version: {process.env.REACT_APP_VERSION}</div>
+                    </div>
+
+
                 </div>
             </div>
             <div className='col-md-10'>
@@ -404,7 +433,6 @@ const App = () => {
                                 setLoadingSendDatas={setLoadingSendDatas}
                                 me={me}
                                 organisationUnitGroups={organisationUnitGroups}
-                                loadingDataStoreReports={loadingDataStoreReports}
                                 setNotif={setNotif}
                                 reports={reports}
                                 legends={legends}
@@ -427,7 +455,6 @@ const App = () => {
                                 setLegendContentss={setLegendContents}
                                 setLegends={setLegends}
                                 loadingLegendContents={loadingLegendContents}
-                                setLoadingLegends={setLoadingLegends}
                                 loadLegendContents={loadLegendContents}
                             />
                         )
@@ -452,7 +479,6 @@ const App = () => {
             </div>
         </div>
     )
-
 
     const RenderListTeiModal = () => (
         <Modal
@@ -515,9 +541,9 @@ const App = () => {
         </Modal>
     )
 
-
     useEffect(() => {
         initDataStore()
+        initAppUserGroup()
     }, [])
 
     return (

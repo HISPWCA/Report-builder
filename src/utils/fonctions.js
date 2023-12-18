@@ -2,15 +2,18 @@
 
 import axios from "axios"
 import dayjs from "dayjs"
-import { TRACKER_ENTITY_INSTANCES_ROUTE, DATA_STORE_ROUTE, ONE_ORG_UNIT_GROUP_ROUTE } from "../api.routes"
+import { TRACKER_ENTITY_INSTANCES_ROUTE, DATA_STORE_ROUTE } from "../api.routes"
 import { ATTRIBUTE, COLOR, CURRENT, DATA_ELEMENT, DATE, DAY, ENROLLMENT, ENROLLMENT_DATE, IMAGE, INCIDENT_DATE, LABEL, MONTH, NOTIFICATON_WARNING, ORGANISATION_UNIT_NAME, OTHER_ELEMENT, SELECTED_DATE, TRACKER, YEAR } from "./constants"
 
+const drawCamember = async (legendTypeId, attribute_code, value, period, setNotif, periodType, legendContentList) => {
 
+  const current_legend_parent = legendContentList?.find(leg => leg.id === legendTypeId)
+  const current_legend = findTheRightLegend(current_legend_parent, period, periodType)
 
-const drawCamember = async (legendTypeId, attribute_code, value, current_html_element) => {
+  const current_html_element = document.getElementById(attribute_code)
+  console.log("attribut code : ", attribute_code)
 
-  const current_legend = legendContentList?.find(leg => leg.id === legendTypeId)
-
+  console.log(current_html_element)
 
   if (current_legend && current_html_element) {
 
@@ -25,7 +28,6 @@ const drawCamember = async (legendTypeId, attribute_code, value, current_html_el
     current_html_element.innerHTML = ""
     current_html_element.append(canvas_parent)
 
-
     if (canvas) {
       const myChart = new Chart(canvas, {
         type: 'pie',
@@ -38,17 +40,15 @@ const drawCamember = async (legendTypeId, attribute_code, value, current_html_el
             ],
             borderColor: "#000",
             borderWidth: 1
-          }]
+          }
+          ]
         }
       })
     }
   } else {
     injectFromId(attribute_code, value)
   }
-
 }
-
-
 
 const injectFromId = (id, value) => {
   const element = document.querySelectorAll('[id="' + id + '"]')
@@ -58,7 +58,6 @@ const injectFromId = (id, value) => {
     })
   }
 }
-
 
 const defaultNotApplicableValueToApply = (attribute, item) => {
 
@@ -76,7 +75,7 @@ const defaultNotApplicableValueToApply = (attribute, item) => {
 
 }
 
-const defaultMissingValueToApply = async (attribute, item) => {
+const defaultMissingValueToApply = (attribute, item) => {
   try {
 
     if (item.defaultType === COLOR && item.missingData) {
@@ -175,7 +174,6 @@ const findTheRightLegend = (currentLegendParent, period, periodType) => {
   return currentLegend
 }
 
-
 const displayNotificationIfLegendIsNotSet = (setNotif, legendName, period) => {
   setNotif({ show: true, message: `Some legends have not been configured for the selected period ( ${dayjs(period).format('YYYY')} ) , the values ​​will be displayed instead of these legends ! `, type: NOTIFICATON_WARNING })
 }
@@ -200,7 +198,6 @@ const checkLabelLegend = async (legendTypeId, attribute_code, value, period, set
     displayNotificationIfLegendIsNotSet(setNotif, current_legend_parent?.name, period)
   }
 }
-
 
 const checkColorLegend = async (legendTypeId, attribute_code, value, period, setNotif, periodType, legendContentList) => {
   const current_legend_parent = legendContentList?.find(leg => leg.id === legendTypeId)
@@ -248,7 +245,6 @@ const checkColorLegend = async (legendTypeId, attribute_code, value, period, set
   }
 }
 
-
 const checkImageLegend = async (legendTypeId, attribute_code, value, period, setNotif, periodType, legendContentList) => {
 
   const current_legend_parent = legendContentList?.find(leg => leg.id === legendTypeId)
@@ -280,7 +276,6 @@ const checkImageLegend = async (legendTypeId, attribute_code, value, period, set
   }
 }
 
-
 const inject_legend = (legendType, legendId, attribute_code, value, period, setNotif, periodType, legendContentList) => {
   if (legendType && legendId && attribute_code && value && period) {
     switch (legendType) {
@@ -306,12 +301,10 @@ const inject_legend = (legendType, legendId, attribute_code, value, period, setN
   }
 }
 
-
 export const inject_tei_into_html = (report, current_tei, selectedProgramTrackerFromHTML, setNotif) => {
 
   if (!selectedProgramTrackerFromHTML)
     return null
-
 
   if (!current_tei)
     return null
@@ -383,7 +376,6 @@ export const inject_tei_into_html = (report, current_tei, selectedProgramTracker
       }
     }
 
-
     // Interprétation des données sur certaines informations d'enrollment
     if (get_data_is === ENROLLMENT) {
       if (get_id) {
@@ -408,7 +400,6 @@ export const inject_tei_into_html = (report, current_tei, selectedProgramTracker
       }
     }
 
-
     // Interprétation des données sur les dataElements
     if (get_data_is === DATA_ELEMENT) {
       if (get_id) {
@@ -429,7 +420,6 @@ export const inject_tei_into_html = (report, current_tei, selectedProgramTracker
 
             found_element = actuel_event.dataValues.find(dv => dv.dataElement === get_dataElement_id)
           }
-
 
           if (found_element) {
             html_el.innerHTML = found_element.value
@@ -514,7 +504,7 @@ export const injectDataIntoHtml = (dataValues, { html }, orgUnits, levels, selec
                   break
 
                 case "pie":
-                  drawCamember(legend_id, html_ID, value, html_el, period, periodType, legendContentList)
+                  drawCamember(legend_id, html_ID, value, period, setNotif, periodType, legendContentList)
                   break
 
                 default:
@@ -533,7 +523,6 @@ export const injectDataIntoHtml = (dataValues, { html }, orgUnits, levels, selec
   }
 
 }
-
 
 export const generateTreeFromOrgUnits = (ouList = [], icon = null, parentId = null, level = 1, setLoading) => {
   setLoading && setLoading(true)
@@ -663,8 +652,6 @@ export const generateTreeFromOrgUnits = (ouList = [], icon = null, parentId = nu
   return nodes
 }
 
-
-//  Cette fonction prend la chaine de string ( parent 1 ) et retourne l'org unit correspondant (ouId) 
 export const getOrgUnitIdFromParentString = (parent_string, selectedOU, orgUnits, orgUnitLevels) => {
   if (parent_string) {
     if (parent_string === CURRENT) {
@@ -705,7 +692,6 @@ export const getOrgUnitIdFromParentString = (parent_string, selectedOU, orgUnits
   }
 }
 
-
 export const getOrgUnitParentFromHtml = (selectedOU, orgUnits, orgUnitLevels) => {
   let uid_list = []
   const id_html_list = document.querySelector('[id="my-table-container"]')?.querySelectorAll("[data-type='AGGREGATE']") || []
@@ -730,7 +716,6 @@ export const getOrgUnitParentFromHtml = (selectedOU, orgUnits, orgUnitLevels) =>
   return uid_list
 }
 
-
 export const getFileAsBase64 = (file) => {
   if (file) {
     return new Promise((resolve, reject) => {
@@ -742,7 +727,6 @@ export const getFileAsBase64 = (file) => {
     })
   }
 }
-
 
 export const getAggregateDimensionsList = report => {
   let dimensions = []
@@ -763,7 +747,6 @@ export const getAggregateDimensionsList = report => {
 
   return dimensions
 }
-
 
 export const cleanAggrateDimensionData = (report, dimensions, period, periodType, selectedOU, orgUnits, orgUnitLevels, legendContentList, organisationUnitGroups) => {
   if (report) {
@@ -811,10 +794,8 @@ export const cleanAggrateDimensionData = (report, dimensions, period, periodType
   }
 }
 
-
 const checkIfOuInGroup = (ouGId, ou_id, organisationUnitGroups) => {
   try {
-    // const response = await axios.get(`${ONE_ORG_UNIT_GROUP_ROUTE}/${ouGId}.json?fields=organisationUnits[id]`)
     const organisatinUnitGroup = organisationUnitGroups.find(ouG => ouG.id === ouGId)
 
     if (organisatinUnitGroup?.organisationUnits.map(ou => ou.id).includes(ou_id)) {
@@ -826,7 +807,6 @@ const checkIfOuInGroup = (ouGId, ou_id, organisationUnitGroups) => {
     return false
   }
 }
-
 
 export const updateAndInjectSchoolNames = (report, selectedOu, organisationUnits = [], organisationUnitLevels) => {
   if (report) {
@@ -877,12 +857,11 @@ export const updateAndInjectOtherElementPeriod = (report, selectedDate, selected
   }
 }
 
-
 export const loadDataStore = async (key_string, setLoading, setState, payload = null) => {
   try {
 
     if (!key_string)
-      throw new Error('Veuillez préciser le key_string du datastore à récupérer')
+      throw new Error('Please specify the key_string of the datastore to retrieve')
 
     setLoading && setLoading(true)
 
@@ -896,7 +875,6 @@ export const loadDataStore = async (key_string, setLoading, setState, payload = 
   } catch (err) {
     setLoading && setLoading(false)
     await createDataToDataStore(key_string, payload ? payload : [])
-    console.clear()
   }
 }
 
@@ -904,10 +882,10 @@ export const saveDataToDataStore = async (key_string, payload, setLoading, setSt
   try {
 
     if (!key_string)
-      throw new Error('Veuillez préciser le key_string du datastore à récupérer')
+      throw new Error('Please specify the key_string of the datastore to retrieve')
 
     if (!payload)
-      throw new Error('Veuillez ajoutée le payload à sauvegarder dans le datastore !')
+      throw new Error('Please add the payload to save in the datastore !')
 
     setLoading && setLoading(true)
     const route = `${DATA_STORE_ROUTE}/${process.env.REACT_APP_DATA_STORE_NAME}/${key_string}`
@@ -941,7 +919,7 @@ export const createDataToDataStore = async (key_string, payload) => {
   try {
 
     if (!key_string)
-      throw new Error('Veuillez préciser le key_string du datastore à récupérer')
+      throw new Error('Please specify the key_string of the datastore to retrieve')
 
     const route = `${DATA_STORE_ROUTE}/${process.env.REACT_APP_DATA_STORE_NAME}/${key_string}`
     await axios.post(route, payload || [])
@@ -953,12 +931,11 @@ export const createDataToDataStore = async (key_string, payload) => {
   }
 }
 
-
 export const deleteKeyFromDataStore = async (key_string) => {
   try {
 
     if (!key_string)
-      throw new Error('Veuillez préciser le key_string du datastore à récupérer')
+      throw new Error('Please specify the key_string of the datastore to retrieve')
 
     const route = `${DATA_STORE_ROUTE}/${process.env.REACT_APP_DATA_STORE_NAME}/${key_string}`
     await axios.delete(route)
@@ -969,8 +946,6 @@ export const deleteKeyFromDataStore = async (key_string) => {
     // throw err
   }
 }
-
-
 
 export const formatPeriodForAnalytic = (period, periodType) => {
   if (periodType === DAY)

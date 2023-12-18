@@ -10,15 +10,12 @@ const DimensionsDialog = ({
     const [programs, setPrograms] = useState([])
     const [selectedOptions, setSelectedOptions] = useState([])
 
-
     const [loadingPrograms, setLoadingPrograms] = useState(false)
-
 
     useEffect(() => {
         loadPrograms()
         selectedPrograms.length > 0 && setSelectedOptions(selectedPrograms.map(p => p.id))
     }, [])
-
 
 
     const getFilterOptions = () => {
@@ -36,7 +33,6 @@ const DimensionsDialog = ({
 
         return [...programs.map(program => ({ label: program.name, value: program.id })), ...new_option_list]
     }
-
 
     const loadPrograms = async _ => {
         try {
@@ -57,7 +53,6 @@ const DimensionsDialog = ({
             setLoadingPrograms(false)
         }
     }
-
 
     const handleOnOptionsSelected = ({ selected }) => {
         if (selected) {

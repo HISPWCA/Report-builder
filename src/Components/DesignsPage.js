@@ -34,7 +34,7 @@ import { RiDeleteBinLine } from 'react-icons/ri'
 import dayjs from 'dayjs'
 import { CgCloseO } from 'react-icons/cg'
 import { AGGREGATE, ATTRIBUTE, CATEGORY_COMBO, CURRENT_ORG_UNIT_OBJECT, DATA_ELEMENT, DATA_SET, DATA_SET_EVENT, DATE, ENROLLMENT, ENROLLMENT_DATE, INCIDENT_DATE, INDICATOR, NOTIFICATON_CRITICAL, NOTIFICATON_SUCCESS, ORGANISATION_UNIT_NAME, OTHER_ELEMENT, PROGRAM_INDICATOR, SELECTED_DATE, TRACKER } from '../utils/constants'
-import { Popconfirm, Segmented, Spin } from 'antd'
+import { Popconfirm, Segmented } from 'antd'
 import { DataDimension } from '@dhis2/analytics'
 import { IoSettingsOutline } from 'react-icons/io5'
 import { AiOutlineSearch } from 'react-icons/ai'
@@ -200,9 +200,12 @@ const DesignsPage = ({
 
       let payload = {}
       let payloadReportContent = {}
+      const refreshReportList = await loadDataStore(process.env.REACT_APP_REPORTS_KEY, null, null, [])
+      console.log("refreshReportList:", refreshReportList)
 
       if (editReport && currentRepport && currentRepportContent) {
-        payload = reports.map(rep => {
+
+        payload = refreshReportList.map(rep => {
           if (rep.id === currentRepport.id) {
             return {
               ...rep,
@@ -214,8 +217,11 @@ const DesignsPage = ({
           }
         })
 
+        const refreshCurrentReportContent = await loadDataStore(`REPORT_${currentRepport.id}`, null, null, {})
+        console.log("refreshCurrentReportContent: ", refreshCurrentReportContent)
+
         payloadReportContent = {
-          ...currentRepportContent,
+          ...refreshCurrentReportContent,
           html: html_code,
           selectedProgram: selectedProgram,
           name: reportName,
@@ -223,9 +229,12 @@ const DesignsPage = ({
           searchProperties
         }
 
-
       } else {
         const reportId = uuid()
+
+        if (refreshReportList.map(r => r.name).includes(reportName))
+          throw new Error("This report is already created ( May be you can change the name ) ")
+
         payload = [
           {
             id: reportId,
@@ -233,7 +242,7 @@ const DesignsPage = ({
             createdAt: dayjs(),
             updatedAt: dayjs(),
           },
-          ...reports
+          ...refreshReportList
         ]
 
         payloadReportContent = {
@@ -246,6 +255,7 @@ const DesignsPage = ({
           updatedAt: dayjs(),
         }
       }
+
       await saveDataToDataStore(process.env.REACT_APP_REPORTS_KEY, payload, null, null, null)
       await saveDataToDataStore(`REPORT_${payloadReportContent.id}`, payloadReportContent, null, null, null, true)
       loadDataStore(process.env.REACT_APP_REPORTS_KEY, setLoadingReports, setReports, [])
@@ -1329,7 +1339,6 @@ const DesignsPage = ({
 
   }
 
-
   const handleClickOtherOrganisationUnitName = () => {
     if (currentHtmlTagSelected && currentHtmlTagSelected !== "") {
       setVisibleOtherOrganisationUnitElementModal(true)
@@ -1382,7 +1391,6 @@ const DesignsPage = ({
     </div>
   )
 
-
   const RenderAddReport = () => loadingInitState ? (
     <div style={{ width: "100%", height: "100%", display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}> <CircularLoader>Loading</CircularLoader> </div>
   ) : (
@@ -1390,7 +1398,6 @@ const DesignsPage = ({
       <div className='my-shadow p-3 bg-white' style={{ position: 'sticky', top: '0px', zIndex: 100 }}>
         {editReport && currentRepport ? <div style={{ fontSize: '16px', fontWeight: 'bold', }}> {currentRepport.name} </div> : <div style={{ fontWeight: 'bold', fontSize: '16px' }}> Design Interface</div>}
       </div>
-
 
       <div className='row py-4 px-3' >
         {editReport && currentRepport && !currentRepportContent && <NoticeBox warning>{`${currentRepport?.name} Content not found !`}</NoticeBox>}
@@ -1441,18 +1448,17 @@ const DesignsPage = ({
     </div>
   )
 
-
   const handleDeleteReport = async (id) => {
     try {
       if (id) {
         setLoadingProcess(false)
         setActiveElementID(id)
-
-        const newPayload = reports.filter(r => r.id !== id)
+       
+        const refreshReportList = await loadDataStore(process.env.REACT_APP_REPORTS_KEY, null, null, [])
+        const newPayload = refreshReportList.filter(r => r.id !== id)
 
         await saveDataToDataStore(process.env.REACT_APP_REPORTS_KEY, newPayload, setLoadingProcess, null, null)
         await deleteKeyFromDataStore(`REPORT_${id}`)
-        //  (process.env.REACT_APP_REPORTS_KEY, newPayload, setLoadingProcess, null, null)
         loadDataStore(process.env.REACT_APP_REPORTS_KEY, setLoadingReports, setReports, [])
 
         setNotif({ show: true, message: 'Delete success !', type: NOTIFICATON_SUCCESS })
@@ -1469,7 +1475,6 @@ const DesignsPage = ({
     }
   }
 
-
   const handleEditReport = async (report) => {
     try {
       setVisibleAddReport(true)
@@ -1484,12 +1489,10 @@ const DesignsPage = ({
     }
   }
 
-
   const handleAddReport = () => {
     setVisibleAddReport(true)
     initSummernote()
   }
-
 
   const RenderListReport = () => (
     <>
